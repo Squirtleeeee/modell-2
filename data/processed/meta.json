@@ -1,0 +1,26 @@
+{
+  "label_to_index": {
+    "standing": 0,
+    "fall": 1,
+    "step": 2,
+    "walk": 3
+  },
+  "index_to_label": {
+    "0": "standing",
+    "1": "fall",
+    "2": "step",
+    "3": "walk"
+  },
+  "sample_rate": 104,
+  "window": 520,
+  "stride": 52,
+  "guard_gap": 104,
+  "feature_cols": [
+    "xAcc",
+    "yAcc",
+    "zAcc",
+    "xGyro",
+    "yGyro",
+    "zGyro"
+  ]
+}

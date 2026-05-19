@@ -1,0 +1,69 @@
+/* Global reset & base styles */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family:
+    'Inter',
+    'Noto Sans SC',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background: #F5F0EC;
+  color: #3D322C;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D0C8C0;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B0A8A0;
+}
+
+/* Ant Design overrides for warm, accessible feel */
+.ant-card {
+  border-radius: 10px;
+}
+
+.ant-statistic-title {
+  color: #8B7E74;
+  font-size: 13px;
+}
+
+.ant-table {
+  font-size: 14px;
+}
+
+/* Larger touch targets for accessibility */
+.ant-btn {
+  min-width: 64px;
+}
+
+/* Card hover */
+.ant-card-hoverable:hover {
+  box-shadow: 0 4px 16px rgba(93, 60, 40, 0.08);
+}
