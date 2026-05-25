@@ -4,7 +4,10 @@ interface User {
   id: number;
   username: string;
   email: string;
+  phone: string | null;
   role: string;
+  email_verified: boolean;
+  phone_verified: boolean;
 }
 
 interface AuthState {
@@ -15,21 +18,37 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  loginByPhonePassword: (phone: string, password: string) => Promise<void>;
+  loginBySms: (phone: string, code: string) => Promise<void>;
+  register: (username: string, email: string, password: string, emailCode: string, phone?: string) => Promise<void>;
   logout: () => void;
-  forgotPassword: (email: string) => Promise<{ devToken?: string }>;
-  resetPassword: (token: string, newPassword: string) => Promise<void>;
+  sendEmailCode: (email: string, purpose: 'register' | 'reset_password') => Promise<void>;
+  sendSmsCode: (phone: string, purpose: 'register' | 'login' | 'reset_password') => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function normalizeUser(raw: Record<string, unknown>): User {
+  return {
+    id: raw.id as number,
+    username: raw.username as string,
+    email: raw.email as string,
+    phone: (raw.phone as string) || null,
+    role: (raw.role as string) || 'family',
+    email_verified: Boolean(raw.email_verified),
+    phone_verified: Boolean(raw.phone_verified),
+  };
+}
 
 function loadState(): AuthState {
   const token = localStorage.getItem('token');
   const userStr = localStorage.getItem('user');
   if (token && userStr) {
     try {
-      return { user: JSON.parse(userStr), token, loading: false };
+      return { user: normalizeUser(JSON.parse(userStr)), token, loading: true };
     } catch {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -41,7 +60,6 @@ function loadState(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(loadState);
 
-  // 启动时验证 token 有效性
   useEffect(() => {
     if (!state.token) {
       setState((s) => ({ ...s, loading: false }));
@@ -53,8 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return r.json();
       })
       .then((data) => {
-        setState({ user: data.user, token: state.token!, loading: false });
-        localStorage.setItem('user', JSON.stringify(data.user));
+        const user = normalizeUser(data.user);
+        setState({ user, token: state.token!, loading: false });
+        localStorage.setItem('user', JSON.stringify(user));
       })
       .catch(() => {
         localStorage.removeItem('token');
@@ -63,34 +82,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  const saveAuth = useCallback((token: string, user: User) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    setState({ user, token, loading: false });
+  }, []);
+
+  const api = useCallback(async (url: string, body: Record<string, unknown>) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+  }, []);
+
+  // 用户名+密码登录
   const login = useCallback(
     async (username: string, password: string) => {
-      const data = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      }).then((r) => r.json().then((d) => ({ ok: r.ok, data: d })));
-      if (!data.ok) throw new Error(data.data.error);
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-      setState({ user: data.data.user, token: data.data.token, loading: false });
+      const data = await api('/api/auth/login', { username, password });
+      saveAuth(data.token, normalizeUser(data.user));
     },
-    []
+    [api, saveAuth]
   );
 
-  const register = useCallback(
-    async (username: string, email: string, password: string) => {
-      const data = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      }).then((r) => r.json().then((d) => ({ ok: r.ok, data: d })));
-      if (!data.ok) throw new Error(data.data.error);
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-      setState({ user: data.data.user, token: data.data.token, loading: false });
+  // 手机号+密码登录
+  const loginByPhonePassword = useCallback(
+    async (phone: string, password: string) => {
+      const data = await api('/api/auth/login', { username: phone, password, loginType: 'phone_password' });
+      saveAuth(data.token, normalizeUser(data.user));
     },
-    []
+    [api, saveAuth]
+  );
+
+  // 手机号+短信验证码登录
+  const loginBySms = useCallback(
+    async (phone: string, code: string) => {
+      const data = await api('/api/auth/login-by-sms', { phone, code });
+      saveAuth(data.token, normalizeUser(data.user));
+    },
+    [api, saveAuth]
+  );
+
+  // 注册
+  const register = useCallback(
+    async (username: string, email: string, password: string, emailCode: string, phone?: string) => {
+      const data = await api('/api/auth/register', { username, email, password, emailCode, phone });
+      saveAuth(data.token, normalizeUser(data.user));
+    },
+    [api, saveAuth]
   );
 
   const logout = useCallback(() => {
@@ -99,34 +141,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, token: null, loading: false });
   }, []);
 
-  const forgotPassword = useCallback(async (email: string) => {
-    const res = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    return data as { devToken?: string };
-  }, []);
+  // 发送邮箱验证码
+  const sendEmailCode = useCallback(
+    async (email: string, purpose: 'register' | 'reset_password') => {
+      await api('/api/auth/send-email-code', { email, purpose });
+    },
+    [api]
+  );
 
-  const resetPassword = useCallback(async (token: string, newPassword: string) => {
-    const res = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, newPassword }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-  }, []);
+  // 发送短信验证码
+  const sendSmsCode = useCallback(
+    async (phone: string, purpose: 'register' | 'login' | 'reset_password') => {
+      await api('/api/auth/send-sms-code', { phone, purpose });
+    },
+    [api]
+  );
+
+  // 忘记密码 — 发送验证码
+  const forgotPassword = useCallback(
+    async (email: string) => {
+      await api('/api/auth/forgot-password', { email });
+    },
+    [api]
+  );
+
+  // 重置密码
+  const resetPassword = useCallback(
+    async (email: string, code: string, newPassword: string) => {
+      await api('/api/auth/reset-password', { email, code, newPassword });
+    },
+    [api]
+  );
 
   return (
     <AuthContext.Provider
       value={{
         ...state,
         login,
+        loginByPhonePassword,
+        loginBySms,
         register,
         logout,
+        sendEmailCode,
+        sendSmsCode,
         forgotPassword,
         resetPassword,
         isAdmin: state.user?.role === 'admin',

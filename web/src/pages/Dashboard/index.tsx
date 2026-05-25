@@ -19,6 +19,7 @@ import {
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
 import { mockAlerts } from '../../mock/data';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Title, Text } = Typography;
 
@@ -75,6 +76,7 @@ export default function Dashboard() {
   const [recentAlerts, setRecentAlerts] = useState<AlertRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = antTheme.useToken();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const load = async () => {
@@ -196,7 +198,7 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="今日步数"
@@ -207,7 +209,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="行走时长"
@@ -218,7 +220,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="站立/静坐时长"
@@ -229,7 +231,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable style={{ borderColor: overview?.fallEvents ? '#E05555' : undefined }}>
             <Statistic
               title="摔倒事件"
@@ -240,7 +242,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="久坐提醒"
@@ -251,7 +253,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="设备电量"
@@ -268,12 +270,12 @@ export default function Dashboard() {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={14}>
           <Card title="今日活动分布">
-            <ReactECharts option={hourlyChartOption} style={{ height: 320 }} />
+            <ReactECharts option={hourlyChartOption} style={{ height: isMobile ? 260 : 320 }} />
           </Card>
         </Col>
         <Col xs={24} lg={10}>
           <Card title="近 7 天趋势">
-            <ReactECharts option={weeklyChartOption} style={{ height: 320 }} />
+            <ReactECharts option={weeklyChartOption} style={{ height: isMobile ? 260 : 320 }} />
           </Card>
         </Col>
       </Row>
@@ -296,6 +298,7 @@ export default function Dashboard() {
           rowKey="id"
           pagination={false}
           size="middle"
+          scroll={{ x: 600 }}
         />
       </Card>
     </div>

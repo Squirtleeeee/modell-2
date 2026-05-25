@@ -7,6 +7,7 @@ import {
   BellOutlined, MessageOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Title, Text } = Typography;
 
@@ -26,6 +27,7 @@ export default function Guardians() {
   const [modalOpen, setModalOpen] = useState(false);
   const [addUsername, setAddUsername] = useState('');
   const [adding, setAdding] = useState(false);
+  const isMobile = useIsMobile();
 
   const api = (url: string, options: RequestInit = {}) =>
     fetch(url, {
@@ -130,7 +132,7 @@ export default function Guardians() {
                 <Button type="primary" onClick={() => setModalOpen(true)}>添加监护人</Button>
               </Empty>
             ) : (
-              <Table columns={guardianColumns} dataSource={guardians} rowKey="id" loading={loading} pagination={false} size="middle" />
+              <Table columns={guardianColumns} dataSource={guardians} rowKey="id" loading={loading} pagination={false} size="middle" scroll={{ x: 500 }} />
             )}
           </Card>
         </Col>
@@ -148,7 +150,7 @@ export default function Guardians() {
             {wards.length === 0 ? (
               <Empty description="暂未监护任何人" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             ) : (
-              <Table columns={wardColumns} dataSource={wards} rowKey="id" loading={loading} pagination={false} size="middle" />
+              <Table columns={wardColumns} dataSource={wards} rowKey="id" loading={loading} pagination={false} size="middle" scroll={{ x: 500 }} />
             )}
           </Card>
         </Col>
@@ -183,6 +185,8 @@ export default function Guardians() {
         confirmLoading={adding}
         okText="确认添加"
         cancelText="取消"
+        width={isMobile ? '100%' : 480}
+        style={{ maxWidth: 480, margin: isMobile ? 0 : undefined }}
       >
         <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
           输入对方的用户名，将其设为你的监护人。对方将收到你的摔倒报警、久坐提醒和语音消息通知。

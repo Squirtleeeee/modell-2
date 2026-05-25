@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Form, Input, Button, Typography, message, Flex, Steps, Alert } from 'antd';
-import { MailOutlined, LockOutlined, KeyOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, Typography, message, Flex, Steps } from 'antd';
+import { MailOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 
 const { Title } = Typography;
@@ -9,16 +9,27 @@ const { Title } = Typography;
 export default function ForgotPassword() {
   const { forgotPassword, resetPassword } = useAuth();
   const [step, setStep] = useState(0);
-  const [devToken, setDevToken] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailSeconds, setEmailSeconds] = useState(0);
+
+  const startEmailCountdown = () => {
+    setEmailSeconds(60);
+    const timer = setInterval(() => {
+      setEmailSeconds((s) => {
+        if (s <= 1) { clearInterval(timer); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+  };
 
   const handleSendEmail = async (values: { email: string }) => {
     setLoading(true);
     try {
-      const result = await forgotPassword(values.email);
-      if (result.devToken) setDevToken(result.devToken);
-      setStep(1);
-      message.success('重置链接已生成');
+      await forgotPassword(values.email);
+      setEmail(values.email);
+      message.success('验证码已发送');
+      startEmailCountdown();
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : '请求失败');
     } finally {
@@ -26,10 +37,10 @@ export default function ForgotPassword() {
     }
   };
 
-  const handleReset = async (values: { token: string; newPassword: string }) => {
+  const handleReset = async (values: { code: string; newPassword: string }) => {
     setLoading(true);
     try {
-      await resetPassword(values.token, values.newPassword);
+      await resetPassword(email, values.code, values.newPassword);
       message.success('密码重置成功，请使用新密码登录');
       setStep(2);
     } catch (err: unknown) {
@@ -39,9 +50,19 @@ export default function ForgotPassword() {
     }
   };
 
+  const handleResend = async () => {
+    try {
+      await forgotPassword(email);
+      message.success('验证码已重新发送');
+      startEmailCountdown();
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : '发送失败');
+    }
+  };
+
   return (
-    <Flex justify="center" align="center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F5F0EC 0%, #EDE5DB 100%)' }}>
-      <Card style={{ width: 440, borderRadius: 12, boxShadow: '0 8px 32px rgba(61, 50, 44, 0.12)' }}>
+    <Flex justify="center" align="center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F5F0EC 0%, #EDE5DB 100%)', padding: 16 }}>
+      <Card style={{ width: '100%', maxWidth: 440, borderRadius: 12, boxShadow: '0 8px 32px rgba(61, 50, 44, 0.12)' }}>
         <Flex vertical align="center" style={{ marginBottom: 24 }}>
           <Title level={3} style={{ marginBottom: 4 }}>找回密码</Title>
         </Flex>
@@ -67,59 +88,61 @@ export default function ForgotPassword() {
             </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit" loading={loading} block>
-                发送重置链接
+                发送验证码
               </Button>
             </Form.Item>
           </Form>
         )}
 
         {step === 1 && (
-          <>
-            {devToken && (
-              <Alert
-                type="info"
-                message="开发模式"
-                description={`重置 Token: ${devToken}`}
-                style={{ marginBottom: 16, wordBreak: 'break-all' }}
+          <Form layout="vertical" onFinish={handleReset} size="large">
+            <Form.Item label="验证码已发送至：">
+              <Typography.Text strong>{email}</Typography.Text>
+            </Form.Item>
+            <Form.Item name="code" rules={[{ required: true, message: '请输入验证码' }]}>
+              <Input
+                prefix={<SafetyCertificateOutlined />}
+                placeholder="6位验证码"
+                maxLength={6}
+                suffix={
+                  <Button type="link" size="small" disabled={emailSeconds > 0} onClick={handleResend}>
+                    {emailSeconds > 0 ? `重新发送(${emailSeconds}s)` : '重新发送'}
+                  </Button>
+                }
               />
-            )}
-            <Form layout="vertical" onFinish={handleReset} size="large">
-              <Form.Item name="token" initialValue={devToken} rules={[{ required: true, message: '请输入重置 Token' }]}>
-                <Input prefix={<KeyOutlined />} placeholder="重置 Token（请查看开发控制台输出）" />
-              </Form.Item>
-              <Form.Item name="newPassword" rules={[
-                { required: true, message: '请输入新密码' },
-                { min: 6, message: '密码长度不能少于 6 位' },
-              ]}>
-                <Input.Password prefix={<LockOutlined />} placeholder="新密码（至少 6 位）" />
-              </Form.Item>
-              <Form.Item
-                name="confirmPassword"
-                dependencies={['newPassword']}
-                rules={[
-                  { required: true, message: '请确认新密码' },
-                  ({ getFieldValue }) => ({
-                    validator(_, value) {
-                      if (!value || getFieldValue('newPassword') === value) return Promise.resolve();
-                      return Promise.reject(new Error('两次输入的密码不一致'));
-                    },
-                  }),
-                ]}
-              >
-                <Input.Password prefix={<LockOutlined />} placeholder="确认新密码" />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" loading={loading} block>
-                  重置密码
-                </Button>
-              </Form.Item>
-            </Form>
-          </>
+            </Form.Item>
+            <Form.Item name="newPassword" rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码长度不能少于 6 位' },
+            ]}>
+              <Input.Password prefix={<LockOutlined />} placeholder="新密码（至少 6 位）" />
+            </Form.Item>
+            <Form.Item
+              name="confirmPassword"
+              dependencies={['newPassword']}
+              rules={[
+                { required: true, message: '请确认新密码' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('newPassword') === value) return Promise.resolve();
+                    return Promise.reject(new Error('两次输入的密码不一致'));
+                  },
+                }),
+              ]}
+            >
+              <Input.Password prefix={<LockOutlined />} placeholder="确认新密码" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={loading} block>
+                重置密码
+              </Button>
+            </Form.Item>
+          </Form>
         )}
 
         {step === 2 && (
           <Flex vertical align="center" gap={16}>
-            <Alert type="success" message="密码重置成功！" showIcon />
+            <Typography.Text type="success" style={{ fontSize: 16 }}>密码重置成功！</Typography.Text>
             <Link to="/login">
               <Button type="primary" size="large">返回登录</Button>
             </Link>

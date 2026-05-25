@@ -1,20 +1,52 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Form, Input, Button, Typography, message, Flex } from 'antd';
-import { UserOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
+import { UserOutlined, MailOutlined, LockOutlined, PhoneOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 
 const { Title, Text } = Typography;
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, sendEmailCode } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [emailSeconds, setEmailSeconds] = useState(0);
 
-  const handleSubmit = async (values: { username: string; email: string; password: string }) => {
+  const startEmailCountdown = () => {
+    setEmailSeconds(60);
+    const timer = setInterval(() => {
+      setEmailSeconds((s) => {
+        if (s <= 1) { clearInterval(timer); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSendEmailCode = async () => {
+    const email = (document.querySelector('input[placeholder="邮箱"]') as HTMLInputElement)?.value;
+    if (!email) {
+      message.warning('请先输入邮箱');
+      return;
+    }
+    try {
+      await sendEmailCode(email, 'register');
+      message.success('验证码已发送至您的邮箱');
+      startEmailCountdown();
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : '发送失败');
+    }
+  };
+
+  const handleSubmit = async (values: {
+    username: string;
+    email: string;
+    password: string;
+    emailCode: string;
+    phone?: string;
+  }) => {
     setLoading(true);
     try {
-      await register(values.username, values.email, values.password);
+      await register(values.username, values.email, values.password, values.emailCode, values.phone);
       message.success('注册成功');
       navigate('/', { replace: true });
     } catch (err: unknown) {
@@ -25,8 +57,8 @@ export default function Register() {
   };
 
   return (
-    <Flex justify="center" align="center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F5F0EC 0%, #EDE5DB 100%)' }}>
-      <Card style={{ width: 400, borderRadius: 12, boxShadow: '0 8px 32px rgba(61, 50, 44, 0.12)' }}>
+    <Flex justify="center" align="center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F5F0EC 0%, #EDE5DB 100%)', padding: 16 }}>
+      <Card style={{ width: '100%', maxWidth: 440, borderRadius: 12, boxShadow: '0 8px 32px rgba(61, 50, 44, 0.12)' }}>
         <Flex vertical align="center" style={{ marginBottom: 32 }}>
           <Title level={3} style={{ marginBottom: 4 }}>注册新账户</Title>
           <Text type="secondary">创建您的家属账户以监护家人</Text>
@@ -36,12 +68,33 @@ export default function Register() {
           <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
             <Input prefix={<UserOutlined />} placeholder="用户名" />
           </Form.Item>
+
           <Form.Item name="email" rules={[
             { required: true, message: '请输入邮箱' },
             { type: 'email', message: '请输入有效的邮箱地址' },
           ]}>
             <Input prefix={<MailOutlined />} placeholder="邮箱" />
           </Form.Item>
+
+          <Form.Item name="emailCode" rules={[{ required: true, message: '请输入邮箱验证码' }]}>
+            <Input
+              prefix={<SafetyCertificateOutlined />}
+              placeholder="邮箱验证码"
+              maxLength={6}
+              suffix={
+                <Button type="link" size="small" disabled={emailSeconds > 0} onClick={handleSendEmailCode}>
+                  {emailSeconds > 0 ? `重新发送(${emailSeconds}s)` : '发送验证码'}
+                </Button>
+              }
+            />
+          </Form.Item>
+
+          <Form.Item name="phone" rules={[
+            { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' },
+          ]}>
+            <Input prefix={<PhoneOutlined />} placeholder="手机号（选填）" />
+          </Form.Item>
+
           <Form.Item name="password" rules={[
             { required: true, message: '请输入密码' },
             { min: 6, message: '密码长度不能少于 6 位' },

@@ -2,9 +2,13 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { runMigrations } = require('./migrations.cjs');
 const authRoutes = require('./routes/auth.cjs');
 const { User, Guardianship } = require('./database.cjs');
 const { requireAuth } = require('./middleware/auth.cjs');
+
+// 运行数据库迁移
+runMigrations();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

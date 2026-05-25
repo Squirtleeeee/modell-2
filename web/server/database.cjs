@@ -16,6 +16,9 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
+    phone TEXT UNIQUE,
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    phone_verified INTEGER NOT NULL DEFAULT 0,
     password_hash TEXT NOT NULL,
     salt TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'family',
@@ -51,18 +54,18 @@ function hashPassword(password, salt) {
 
 // 用户操作
 const User = {
-  create(username, email, password, role = 'family') {
+  create(username, email, password, role = 'family', phone = null) {
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = hashPassword(password, salt);
     const stmt = db.prepare(
-      'INSERT INTO users (username, email, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO users (username, email, password_hash, salt, role, phone) VALUES (?, ?, ?, ?, ?, ?)'
     );
-    const result = stmt.run(username, email, hash, salt, role);
+    const result = stmt.run(username, email, hash, salt, role, phone || null);
     return this.findById(result.lastInsertRowid);
   },
 
   findById(id) {
-    const row = db.prepare('SELECT id, username, email, role, created_at, updated_at FROM users WHERE id = ?').get(id);
+    const row = db.prepare('SELECT id, username, email, phone, email_verified, phone_verified, role, created_at, updated_at FROM users WHERE id = ?').get(id);
     return row || null;
   },
 
@@ -72,6 +75,10 @@ const User = {
 
   findByEmail(email) {
     return db.prepare('SELECT * FROM users WHERE email = ?').get(email) || null;
+  },
+
+  findByPhone(phone) {
+    return db.prepare('SELECT * FROM users WHERE phone = ?').get(phone) || null;
   },
 
   verifyPassword(password, user) {
@@ -85,8 +92,20 @@ const User = {
     db.prepare('UPDATE users SET password_hash = ?, salt = ?, updated_at = datetime(\'now\') WHERE id = ?').run(hash, salt, id);
   },
 
+  setEmailVerified(id) {
+    db.prepare('UPDATE users SET email_verified = 1, updated_at = datetime(\'now\') WHERE id = ?').run(id);
+  },
+
+  setPhoneVerified(id) {
+    db.prepare('UPDATE users SET phone_verified = 1, updated_at = datetime(\'now\') WHERE id = ?').run(id);
+  },
+
+  setPhone(id, phone) {
+    db.prepare('UPDATE users SET phone = ?, phone_verified = 1, updated_at = datetime(\'now\') WHERE id = ?').run(phone, id);
+  },
+
   list() {
-    return db.prepare('SELECT id, username, email, role, created_at, updated_at FROM users ORDER BY created_at DESC').all();
+    return db.prepare('SELECT id, username, email, phone, email_verified, phone_verified, role, created_at, updated_at FROM users ORDER BY created_at DESC').all();
   },
 
   count() {
@@ -163,10 +182,56 @@ const Guardianship = {
   },
 };
 
+// 验证码
+const VerificationCode = {
+  create(identifier, code, type, purpose) {
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    // 删除同一 identifier+type+purpose 的旧未使用验证码
+    db.prepare(
+      'DELETE FROM verification_codes WHERE identifier = ? AND type = ? AND purpose = ? AND used = 0'
+    ).run(identifier, type, purpose);
+    // 清理过期和已使用的验证码
+    db.prepare(
+      "DELETE FROM verification_codes WHERE expires_at < datetime('now') OR used = 1"
+    ).run();
+    db.prepare(
+      'INSERT INTO verification_codes (identifier, code_hash, type, purpose, expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(identifier, codeHash, type, purpose, expiresAt);
+  },
+
+  verify(identifier, code, type, purpose) {
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const record = db.prepare(
+      `SELECT * FROM verification_codes
+       WHERE identifier = ? AND type = ? AND purpose = ? AND used = 0 AND expires_at > datetime('now')
+       ORDER BY created_at DESC LIMIT 1`
+    ).get(identifier, type, purpose);
+
+    if (!record) return { success: false, error: '验证码不存在或已过期' };
+
+    // 增加尝试次数
+    const attempts = record.attempts + 1;
+    db.prepare('UPDATE verification_codes SET attempts = ? WHERE id = ?').run(attempts, record.id);
+
+    if (attempts > 5) {
+      db.prepare('UPDATE verification_codes SET used = 1 WHERE id = ?').run(record.id);
+      return { success: false, error: '验证码尝试次数过多，请重新获取' };
+    }
+
+    if (record.code_hash !== codeHash) {
+      return { success: false, error: '验证码错误' };
+    }
+
+    db.prepare('UPDATE verification_codes SET used = 1 WHERE id = ?').run(record.id);
+    return { success: true };
+  },
+};
+
 // 创建默认管理员（首次启动）
 if (User.count() === 0) {
   User.create('admin', 'admin@example.com', 'admin123', 'admin');
   console.log('[DB] 默认管理员已创建: admin / admin123');
 }
 
-module.exports = { db, User, PasswordReset, Guardianship };
+module.exports = { db, User, PasswordReset, Guardianship, VerificationCode };

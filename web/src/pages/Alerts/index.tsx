@@ -19,6 +19,7 @@ import {
 import { AlertOutlined, CheckCircleOutlined, WarningOutlined, SearchOutlined } from '@ant-design/icons';
 import { fetchAlerts, updateAlertStatus } from '../../api';
 import type { AlertRecord } from '../../mock/data';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -33,6 +34,7 @@ export default function Alerts() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
   const [handlerNote, setHandlerNote] = useState('');
+  const isMobile = useIsMobile();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -212,6 +214,7 @@ export default function Alerts() {
             showTotal: (t) => `共 ${t} 条记录`,
           }}
           size="middle"
+          scroll={{ x: 800 }}
         />
       </Card>
 
@@ -228,7 +231,8 @@ export default function Alerts() {
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
         footer={null}
-        width={520}
+        width={isMobile ? '100%' : 520}
+        style={{ maxWidth: 520, margin: isMobile ? 0 : undefined }}
       >
         {selectedAlert && (
           <>

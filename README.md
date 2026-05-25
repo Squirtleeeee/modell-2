@@ -13,10 +13,11 @@
 - [数据库设计](#数据库设计)
 - [已实现功能](#已实现功能)
   - [用户认证系统](#1-用户认证系统)
-  - [数据看板](#2-数据看板)
-  - [报警记录管理](#3-报警记录管理)
-  - [设备管理](#4-设备管理)
-  - [监护人系统](#5-监护人系统)
+  - [移动端适配](#2-移动端适配)
+  - [数据看板](#3-数据看板)
+  - [报警记录管理](#4-报警记录管理)
+  - [设备管理](#5-设备管理)
+  - [监护人系统](#6-监护人系统)
 - [API 接口文档](#api-接口文档)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
@@ -45,6 +46,9 @@
 | 数据库 | SQLite (better-sqlite3) | — |
 | 认证 | JWT (jsonwebtoken) | — |
 | 密码哈希 | PBKDF2-SHA512 (Node.js crypto) | — |
+| 邮件服务 | Nodemailer (QQ邮箱 SMTP) | — |
+| 短信服务 | 阿里云短信 SDK (Mock fallback) | — |
+| 频率限制 | express-rate-limit | — |
 | AI 推理引擎 | TFLite Micro / Ethos-U55 NPU | 嵌入式端 |
 | 实时操作系统 | RT-Thread | 嵌入式端 |
 | 图形库 | LVGL | 嵌入式端 MIPI-DSI 屏幕 |
@@ -95,6 +99,9 @@
 | id | INTEGER PK | 自增主键 |
 | username | TEXT UNIQUE | 用户名 |
 | email | TEXT UNIQUE | 邮箱 |
+| phone | TEXT (UNIQUE INDEX) | 手机号（可选，唯一） |
+| email_verified | INTEGER | 邮箱是否已验证 (0/1) |
+| phone_verified | INTEGER | 手机号是否已验证 (0/1) |
 | password_hash | TEXT | PBKDF2-SHA512 哈希 |
 | salt | TEXT | 随机盐值 (16 bytes) |
 | role | TEXT | 'admin' 管理员 / 'family' 家属 |
@@ -120,6 +127,20 @@
 | guardian_id | INTEGER FK | 监护人 ID (关联 users.id) |
 | created_at | TEXT | 建立时间 |
 | UNIQUE(ward_id, guardian_id) | — | 防止重复绑定 |
+
+### verification_codes 表
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| identifier | TEXT | 邮箱地址或手机号 |
+| code_hash | TEXT | 验证码 SHA-256 哈希 |
+| type | TEXT | 'email' 邮箱 / 'sms' 短信 |
+| purpose | TEXT | 'register' / 'login' / 'reset_password' |
+| expires_at | TEXT | 过期时间 (5 分钟有效) |
+| used | INTEGER | 是否已使用 (0/1) |
+| attempts | INTEGER | 错误尝试次数 (≥5 次自动作废) |
+| created_at | TEXT | 创建时间 |
 
 ---
 
@@ -159,12 +180,34 @@
 | admin (管理员) | 全部页面访问，页面顶部显示金色"管理员"标签 |
 | family (家属) | 数据看板、报警记录、设备管理、监护人管理 |
 
+**三种登录方式：**
+
+| 方式 | 入参 | 说明 |
+|------|------|------|
+| 用户名 + 密码 | { username, password } | 原有方式，保持不变 |
+| 手机号 + 密码 | { username: phone, password, loginType: "phone_password" } | 通过手机号查找用户并验证密码 |
+| 手机号 + 短信验证码 | { phone, code } | 发送 6 位验证码到手机，验证后登录 |
+
+**邮箱验证码机制：**
+
+- 注册时必须通过邮箱验证：输入邮箱 → 点击"发送验证码"→ QQ邮箱 SMTP 发送 6 位数字验证码 → 输入验证码完成注册
+- 忘记密码走验证码流程：输入邮箱 → 收验证码 → 输入验证码 + 新密码 → 重置成功
+- 验证码 5 分钟有效，SHA-256 哈希存储于 verification_codes 表
+- 错误尝试超过 5 次自动作废，需重新获取
+- Mock 降级模式：未配置 SMTP 时验证码输出到控制台，开发环境可直接使用
+
+**短信验证码机制：**
+
+- 支持阿里云短信服务，通过 `SMS_PROVIDER` 环境变量切换 (`alicloud` / `mock`)
+- 默认 Mock 模式：验证码输出到服务端控制台，开发环境无需配置短信模板
+- 生产环境需配置阿里云 AccessKey、签名和模板 ID
+
 **密码重置流程：**
 
 1. 用户输入注册邮箱
-2. 后端生成 32 字节随机 Token，存入 password_resets 表（1 小时有效）
-3. 开发模式下 Token 直接返回前端显示（生产环境应通过邮件发送）
-4. 用户输入 Token + 新密码完成重置
+2. 后端生成 6 位验证码，存入 verification_codes 表（5 分钟有效）
+3. 通过 QQ邮箱 SMTP 发送验证码邮件（Mock 模式输出到控制台）
+4. 用户输入验证码 + 新密码完成重置
 
 **默认账户：**
 
@@ -174,9 +217,37 @@
 
 首次启动时自动创建。数据库文件为 `server/data.db`，删除后重新启动即可重置。
 
+**API 频率限制：**
+
+| 端点 | 限制 | 说明 |
+|------|------|------|
+| 发送验证码 | 1 次 / 60 秒 / identifier | 按邮箱或手机号限流 |
+| 验证码校验 | 5 次 / 5 分钟 / IP | 防止暴力破解验证码 |
+| 登录 | 10 次 / 1 分钟 / IP | 防止暴力破解密码 |
+| 注册 | 3 次 / 1 分钟 / IP | 防止批量注册 |
+
 ---
 
-### 2. 数据看板
+### 2. 移动端适配
+
+**响应式策略：**以 768px 为桌面/移动断点 (Ant Design md 断点)，一套代码同时适配桌面和移动浏览器。
+
+| 特性 | 桌面端 (≥768px) | 移动端 (<768px) |
+|------|----------------|-----------------|
+| 导航 | 深色渐变侧边栏，可折叠 | 顶部汉堡菜单按钮，Drawer 抽屉滑出 |
+| 页面内容边距 | 24px | 12px |
+| 认证卡片 | 固定宽度 400-440px | `max-width` + `width: calc(100% - 32px)` 自适应 |
+| KPI 卡片 | 6 列并排 | 极窄屏单列，逐步扩展 |
+| 图表高度 | 320px | 260px（节省纵向空间） |
+| 表格 | 正常 | 横向滚动 (`scroll.x`) |
+| Modal 弹窗 | 固定宽度 520px | `width: 100%`, `maxWidth: 520px` |
+| 顶栏 | 显示用户名 | 隐藏用户名文字，仅保留头像 |
+
+**新增前端 Hook：**`src/hooks/useMediaQuery.ts` 提供 `useMediaQuery(query)` 和 `useIsMobile()` 快捷方法。
+
+---
+
+### 3. 数据看板
 
 **KPI 卡片（6 个）：**
 
@@ -195,7 +266,7 @@
 
 ---
 
-### 3. 报警记录管理
+### 4. 报警记录管理
 
 - 列表：编号、类型（摔倒红色/久坐橙色）、时间（默认降序）、状态、置信度/时长、备注
 - 筛选：按类型 + 按状态 + 日期范围
@@ -205,7 +276,7 @@
 
 ---
 
-### 4. 设备管理
+### 5. 设备管理
 
 **状态监控：**设备编号、名称、在线状态指示灯、当前活动 Tag、电量进度条、固件版本、最后心跳时间。
 
@@ -224,7 +295,7 @@
 
 ---
 
-### 5. 监护人系统
+### 6. 监护人系统
 
 **关系模型：**多对多关系，一个用户可有多个监护人，一个监护人可监护多人。ward_id + guardian_id 唯一约束防止重复。
 
@@ -248,11 +319,15 @@
 
 | 方法 | 路径 | 鉴权 | 入参 | 出参 |
 |------|------|------|------|------|
-| POST | `/api/auth/register` | 否 | { username, email, password } | { token, user } |
-| POST | `/api/auth/login` | 否 | { username, password } | { token, user } |
+| POST | `/api/auth/register` | 否 | { username, email, password, emailCode, phone? } | { token, user } |
+| POST | `/api/auth/login` | 否 | { username, password, loginType? } | { token, user } |
+| POST | `/api/auth/login-by-sms` | 否 | { phone, code } | { token, user } |
 | GET | `/api/auth/me` | Bearer | — | { user } |
-| POST | `/api/auth/forgot-password` | 否 | { email } | { message, devToken } |
-| POST | `/api/auth/reset-password` | 否 | { token, newPassword } | { message } |
+| POST | `/api/auth/send-email-code` | 否 | { email, purpose } | { message } |
+| POST | `/api/auth/send-sms-code` | 否 | { phone, purpose } | { message } |
+| POST | `/api/auth/verify-code` | 否 | { identifier, code, type, purpose } | { verified } |
+| POST | `/api/auth/forgot-password` | 否 | { email } | { message } |
+| POST | `/api/auth/reset-password` | 否 | { email, code, newPassword } | { message } |
 
 ### 监护人 API — `/api/guardians`
 
@@ -288,26 +363,34 @@ web/
 │
 ├── server/                        # Express 后端
 │   ├── index.cjs                  # 入口 (API + 静态文件 + SPA 回退)
-│   ├── database.cjs               # SQLite 初始化 + 3 个数据模型
+│   ├── database.cjs               # SQLite 初始化 + 4 个数据模型
 │   ├── data.db                    # SQLite 数据库文件 (自动生成)
-│   ├── middleware/auth.cjs        # JWT 签发 + 鉴权中间件
-│   └── routes/auth.cjs            # 认证路由 (注册/登录/找回密码)
+│   ├── migrations.cjs             # 数据库迁移系统 (自动升级旧库)
+│   ├── middleware/
+│   │   ├── auth.cjs               # JWT 签发 + 鉴权中间件
+│   │   └── rateLimit.cjs          # API 频率限制 (发送/校验/登录/注册)
+│   ├── routes/auth.cjs            # 认证路由 (注册/登录/找回密码/验证码)
+│   └── services/
+│       ├── email.cjs              # 邮件发送 (QQ邮箱 SMTP + Mock fallback)
+│       └── sms.cjs                # 短信发送 (阿里云 + Mock fallback)
 │
 ├── src/                           # React 前端
 │   ├── App.tsx                    # 根: 路由 + 主题 + AuthProvider
 │   ├── theme/index.ts             # Ant Design 主题 (暖珊瑚+青绿)
-│   ├── context/AuthContext.tsx    # 全局认证状态
+│   ├── context/AuthContext.tsx    # 全局认证状态 (3 种登录方式)
+│   ├── hooks/
+│   │   └── useMediaQuery.ts       # 响应式媒体查询 Hook
 │   ├── api/index.ts               # API 层 (Mock, 预留 fetch 切换)
 │   ├── mock/data.ts               # Mock 数据源
 │   ├── components/
-│   │   ├── Layout/index.tsx       # 主布局 (深色侧边栏+顶栏+用户菜单)
+│   │   ├── Layout/index.tsx       # 主布局 (桌面侧边栏 / 移动端抽屉菜单)
 │   │   └── ProtectedRoute/       # 路由保护
 │   └── pages/
-│       ├── Login/index.tsx        # 登录
-│       ├── Register/index.tsx     # 注册
-│       ├── ForgotPassword/        # 找回密码 (3 步)
-│       ├── Dashboard/index.tsx    # 数据看板
-│       ├── Alerts/index.tsx       # 报警记录
+│       ├── Login/index.tsx        # 登录 (3 个 Tab 切换登录方式)
+│       ├── Register/index.tsx     # 注册 (含邮箱验证码)
+│       ├── ForgotPassword/        # 找回密码 (邮箱验证码流程)
+│       ├── Dashboard/index.tsx    # 数据看板 (响应式 KPI + 图表)
+│       ├── Alerts/index.tsx       # 报警记录 (响应式表格 + Modal)
 │       ├── Device/index.tsx       # 设备管理
 │       └── Guardians/index.tsx    # 监护人管理
 │
@@ -325,6 +408,33 @@ web/
 
 - Node.js >= 18
 - Windows 10/11（自带 SSH）
+
+### 环境变量（可选配置）
+
+以下变量无需配置即可运行，未配置时自动降级为 Mock 模式（验证码输出到控制台）：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `SMTP_USER` | QQ 邮箱地址 | (空，使用 Mock) |
+| `SMTP_PASS` | QQ 邮箱授权码（非密码） | (空，使用 Mock) |
+| `SMS_PROVIDER` | 短信提供商：`alicloud` / `mock` | `mock` |
+| `ALICLOUD_ACCESS_KEY_ID` | 阿里云 AccessKey | (空，使用 Mock) |
+| `ALICLOUD_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | (空，使用 Mock) |
+| `ALICLOUD_SMS_SIGN_NAME` | 短信签名 | `行动安全守护` |
+| `ALICLOUD_SMS_TEMPLATE_CODE` | 短信模板 ID | (空，使用 Mock) |
+
+**启用 QQ 邮箱：**
+```bash
+# Windows PowerShell
+$env:SMTP_USER="your-qq@qq.com"
+$env:SMTP_PASS="your_authorization_code"
+
+# Linux / macOS
+export SMTP_USER="your-qq@qq.com"
+export SMTP_PASS="your_authorization_code"
+```
+
+QQ 邮箱授权码获取：QQ邮箱 → 设置 → 账户 → POP3/SMTP 服务 → 开启并获取授权码。
 
 ### 开发模式
 
@@ -456,6 +566,8 @@ ssh -R 80:localhost:3001 serveo.net
 
 ### 五、移动端 App (Flutter)
 
+> 注：Web 端已完成响应式适配（768px 断点），手机浏览器可直接使用。Flutter 原生 App 作为后续增强项。
+
 | 功能 | 优先级 |
 |------|--------|
 | 账户 + 设备绑定 | 高 |
@@ -471,7 +583,9 @@ ssh -R 80:localhost:3001 serveo.net
 
 - MQTT Broker (EMQX)：设备 ↔ 云端双向通信
 - WebSocket：实时推送报警给 Web 端
-- 邮件服务：找回密码 Token 通过真实邮件发送
+- ~~邮件服务：找回密码 Token 通过真实邮件发送~~ → ✅ 已实现（QQ邮箱 SMTP + Mock 降级）
+- ~~短信验证：手机号验证码登录~~ → ✅ 已实现（阿里云短信 + Mock 降级）
+- ~~移动端适配：Web 响应式布局~~ → ✅ 已实现（768px 断点，抽屉菜单，表格横向滚动）
 - MySQL 迁移：生产环境数据库升级
 - Redis 缓存：在线状态、消息队列
 
