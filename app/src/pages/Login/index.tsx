@@ -13,6 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [smsSeconds, setSmsSeconds] = useState(0);
   const from = (location.state as { from?: string })?.from || '/';
+  const serverUrl = localStorage.getItem('server_url');
 
   // SMS countdown
   const startSmsCountdown = () => {
@@ -166,7 +167,22 @@ export default function Login() {
 
   return (
     <Flex justify="center" align="center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F5F0EC 0%, #EDE5DB 100%)', padding: 16 }}>
-      <Card style={{ width: '100%', maxWidth: 400, borderRadius: 12, boxShadow: '0 8px 32px rgba(61, 50, 44, 0.12)' }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        {!serverUrl && (
+          <div style={{
+            background: '#FFF7E6', border: '1px solid #FFD591', borderRadius: 8,
+            padding: '12px 14px', marginBottom: 16, fontSize: 13,
+          }}>
+            <Text strong style={{ color: '#D46B08', fontSize: 14 }}>首次使用请先配置服务器</Text>
+            <br />
+            <Text style={{ fontSize: 12 }}>点击右上角齿轮图标 → 输入后端地址 → 测试连接 → 保存</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              同 WiFi：http://电脑IP:3001 公网：https://域名
+            </Text>
+          </div>
+        )}
+        <Card style={{ borderRadius: 12, boxShadow: '0 8px 32px rgba(61, 50, 44, 0.12)' }}>
         <Flex vertical align="center" style={{ marginBottom: 24 }}>
           <Title level={3} style={{ marginBottom: 4 }}>行动安全守护系统</Title>
           <Text type="secondary">登录您的账户</Text>
@@ -185,6 +201,7 @@ export default function Login() {
           </Text>
         </Flex>
       </Card>
+      </div>
     </Flex>
   );
 }

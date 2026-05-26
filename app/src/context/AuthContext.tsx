@@ -57,6 +57,8 @@ function loadState(): AuthState {
   return { user: null, token: null, loading: false };
 }
 
+const getServerUrl = () => localStorage.getItem('server_url') || '';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(loadState);
 
@@ -65,7 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, loading: false }));
       return;
     }
-    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${state.token}` } })
+    const server = getServerUrl();
+    if (!server) {
+      setState({ user: null, token: null, loading: false });
+      return;
+    }
+    fetch(`${server}/api/auth/me`, { headers: { Authorization: `Bearer ${state.token}` } })
       .then((r) => {
         if (!r.ok) throw new Error('invalid');
         return r.json();
@@ -89,7 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const api = useCallback(async (url: string, body: Record<string, unknown>) => {
-    const res = await fetch(url, {
+    const server = getServerUrl();
+    if (!server) throw new Error('请先点击右上角齿轮图标配置服务器地址');
+    const res = await fetch(`${server}${url}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
