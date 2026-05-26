@@ -95,7 +95,7 @@ async function main() {
     const fall = cycle % 50 === 25;
     const activity = fall ? 'fall' : cycle % 3 === 0 ? 'walking' : 'standing';
     await sendData(activity, fall);
-  }, 2000);
+  }, 5000);
 }
 
 main().catch(console.error);

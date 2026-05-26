@@ -79,8 +79,25 @@ export default function Dashboard() {
   const { token } = antTheme.useToken();
   const isMobile = useIsMobile();
   const { connected, join, on } = useSocket();
+  const [chartKey, setChartKey] = useState(0);
 
-  const loadData = async () => {
+  const loadKpi = async () => {
+    const ov = await fetchDashboardOverview();
+    setOverview(ov);
+  };
+
+  const loadCharts = async () => {
+    const [hourly, weekly] = await Promise.all([
+      fetchHourlyActivity(),
+      fetchWeeklyTrend(),
+    ]);
+    setHourlyData(hourly);
+    setWeeklyTrend(weekly);
+    setRecentAlerts(mockAlerts.slice(0, 5));
+  };
+
+  const loadAll = async () => {
+    setLoading(true);
     const [ov, hourly, weekly] = await Promise.all([
       fetchDashboardOverview(),
       fetchHourlyActivity(),
@@ -93,17 +110,24 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadAll(); }, []);
 
-  // WebSocket 实时刷新
+  // WebSocket 实时刷新 KPI（轻量）
   useEffect(() => {
     const { user } = JSON.parse(localStorage.getItem('user') || '{}');
     if (user?.id) join(user.id);
   }, [connected]);
 
   useEffect(() => {
-    return on('device_update', () => { loadData(); });
+    return on('device_update', () => { loadKpi(); });
   }, [on]);
+
+  // 图表 30 秒刷新一次（重量）
+  useEffect(() => {
+    if (loading) return;
+    const timer = setInterval(() => { loadCharts(); setChartKey(k => k + 1); }, 30000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   if (loading) {
     return (
@@ -281,12 +305,12 @@ export default function Dashboard() {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={14}>
           <Card title="今日活动分布">
-            <ReactECharts option={hourlyChartOption} style={{ height: isMobile ? 260 : 320 }} />
+            <ReactECharts key={chartKey} option={hourlyChartOption} style={{ height: isMobile ? 260 : 320 }} />
           </Card>
         </Col>
         <Col xs={24} lg={10}>
           <Card title="近 7 天趋势">
-            <ReactECharts option={weeklyChartOption} style={{ height: isMobile ? 260 : 320 }} />
+            <ReactECharts key={chartKey + 100} option={weeklyChartOption} style={{ height: isMobile ? 260 : 320 }} />
           </Card>
         </Col>
       </Row>

@@ -40,21 +40,23 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const { token } = antTheme.useToken();
   const { connected, join, on } = useSocket();
+  const [chartKey, setChartKey] = useState(0);
 
-  const loadData = async () => {
-    const [ov, hourly, weekly] = await Promise.all([
-      fetchDashboardOverview(),
-      fetchHourlyActivity(),
-      fetchWeeklyTrend(),
-    ]);
-    setOverview(ov);
-    setHourlyData(hourly);
-    setWeeklyTrend(weekly);
-    setRecentAlerts(mockAlerts.slice(0, 3));
-    setLoading(false);
+  const loadKpi = async () => { setOverview(await fetchDashboardOverview()); };
+
+  const loadCharts = async () => {
+    const [hourly, weekly] = await Promise.all([fetchHourlyActivity(), fetchWeeklyTrend()]);
+    setHourlyData(hourly); setWeeklyTrend(weekly); setRecentAlerts(mockAlerts.slice(0, 3));
   };
 
-  useEffect(() => { loadData(); }, []);
+  const loadAll = async () => {
+    setLoading(true);
+    const [ov, hourly, weekly] = await Promise.all([fetchDashboardOverview(), fetchHourlyActivity(), fetchWeeklyTrend()]);
+    setOverview(ov); setHourlyData(hourly); setWeeklyTrend(weekly);
+    setRecentAlerts(mockAlerts.slice(0, 3)); setLoading(false);
+  };
+
+  useEffect(() => { loadAll(); }, []);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -64,8 +66,14 @@ export default function Dashboard() {
   }, [connected]);
 
   useEffect(() => {
-    return on('device_update', () => { loadData(); });
+    return on('device_update', () => { loadKpi(); });
   }, [on]);
+
+  useEffect(() => {
+    if (loading) return;
+    const timer = setInterval(() => { loadCharts(); setChartKey(k => k + 1); }, 30000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   if (loading) {
     return (
@@ -139,10 +147,10 @@ export default function Dashboard() {
 
       {/* Charts */}
       <Card title={<Text strong style={{ fontSize: 14 }}>今日活动分布</Text>} size="small" style={{ marginBottom: 12 }}>
-        <ReactECharts option={hourlyChartOption} style={{ height: 220 }} />
+        <ReactECharts key={chartKey} option={hourlyChartOption} style={{ height: 220 }} />
       </Card>
       <Card title={<Text strong style={{ fontSize: 14 }}>近 7 天趋势</Text>} size="small" style={{ marginBottom: 12 }}>
-        <ReactECharts option={weeklyChartOption} style={{ height: 220 }} />
+        <ReactECharts key={chartKey + 100} option={weeklyChartOption} style={{ height: 220 }} />
       </Card>
 
       {/* Recent Alerts */}
