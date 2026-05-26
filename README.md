@@ -113,10 +113,11 @@ web/                                  # 项目根目录
 │   │
 │   ├── server/                       # Express 后端
 │   │   ├── index.cjs                 # 入口（API + WebSocket + 静态文件）
-│   │   ├── database.cjs              # SQLite 初始化 + 7 个数据模型
+│   │   ├── database.cjs              # SQLite 初始化 + 8 个数据模型
 │   │   ├── data.db                   # 数据库文件（自动生成）
-│   │   ├── migrations.cjs            # 数据库迁移系统
+│   │   ├── migrations.cjs            # 数据库迁移系统（4 个迁移）
 │   │   ├── simulator.cjs             # 设备数据模拟器
+│   │   ├── seed.cjs                  # 演示种子数据脚本
 │   │   ├── middleware/
 │   │   │   ├── auth.cjs              # JWT 签发 + 鉴权中间件
 │   │   │   └── rateLimit.cjs         # 频率限制
@@ -125,6 +126,7 @@ web/                                  # 项目根目录
 │   │   │   ├── dashboard.cjs         # 看板数据路由
 │   │   │   ├── device.cjs            # 设备数据路由
 │   │   │   ├── alerts.cjs            # 告警路由
+│   │   │   ├── guardians.cjs         # 监护人路由（申请/同意/拒绝）
 │   │   │   └── messages.cjs          # 消息路由
 │   │   └── services/
 │   │       ├── email.cjs             # 邮件发送
@@ -135,6 +137,7 @@ web/                                  # 项目根目录
 │   │   ├── theme/index.ts            # 主题配色
 │   │   ├── context/AuthContext.tsx   # 全局认证状态
 │   │   ├── hooks/useMediaQuery.ts    # 响应式 Hook
+│   │   ├── hooks/useSocket.ts        # WebSocket 连接 Hook
 │   │   ├── api/index.ts              # API 层（真实请求 + Mock 兜底）
 │   │   ├── mock/data.ts              # Mock 数据
 │   │   ├── components/
@@ -147,9 +150,10 @@ web/                                  # 项目根目录
 │   │       ├── Dashboard/            # 数据看板
 │   │       ├── Alerts/               # 报警记录
 │   │       ├── Device/               # 设备管理
-│   │       └── Guardians/            # 监护人管理
+│   │       └── Guardians/            # 监护人管理（搜索+申请+列表）
+│   │       └── Messages/             # 在线实时聊天
 │   │
-│   └── dist/                         # 构建产物
+│   ├── dist/                         # 构建产物
 │
 ├── app/                              # 移动端 Android App
 │   ├── package.json                  # 移动端依赖
@@ -247,6 +251,18 @@ web/                                  # 项目根目录
 | read | INTEGER | 已读 0/1 |
 | created_at | TEXT | 发送时间 |
 
+### guardian_requests
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| from_user_id | INTEGER FK | 申请发起者 |
+| to_user_id | INTEGER FK | 申请接收者 |
+| status | TEXT | pending / accepted / rejected |
+| created_at | TEXT | 申请时间 |
+| updated_at | TEXT | 处理时间 |
+| UNIQUE(from_user_id, to_user_id) | — | 防止重复申请 |
+
 ---
 
 ## 已实现功能
@@ -277,12 +293,17 @@ web/                                  # 项目根目录
 - 设备数据上报接口 `POST /api/device/data`
 
 ### 监护人对偶系统
-- 多对多关系，添加/移除监护人
-- 不能自监护 + 防重复
+- **申请制**：搜索用户名 → 发送申请 → 对方同意/拒绝 → 自动建立监护关系
+- 多对多关系，可移除监护人
+- 不能自监护 + 防重复 + 防重复申请
+- WebSocket 实时推送申请通知（对方立刻收到红点提醒）
+- 申请同意后双方自动互为联系人，可开始聊天
 
-### 用户消息
-- 一对一聊天（REST API + WebSocket 实时推送）
-- 未读消息计数
+### 用户消息（类似微信/QQ 的在线聊天）
+- **联系人来源**：监护关系自动成为联系人 + 有消息记录的用户
+- 一对一实时聊天：REST API 写入 + WebSocket 实时推送到对方
+- 聊天页面：网页端分栏布局（左联系人右聊天窗），移动端全屏切换
+- 未读消息计数：侧边栏/顶栏红点角标，新消息实时更新
 
 ### 设备模拟器
 - `node server/simulator.cjs` 模拟设备持续上报
@@ -353,8 +374,12 @@ web/                                  # 项目根目录
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
 | GET | `/api/guardians` | Bearer | 我的监护人 + 我监护的人 |
-| POST | `/api/guardians` | Bearer | 添加监护人 |
+| GET | `/api/guardians/requests` | Bearer | 收到的 + 发出的申请列表 |
+| POST | `/api/guardians/request` | Bearer | 发送监护人申请（通过用户名） |
+| PUT | `/api/guardians/request/:id/accept` | Bearer | 同意申请 |
+| PUT | `/api/guardians/request/:id/reject` | Bearer | 拒绝申请 |
 | DELETE | `/api/guardians/:id` | Bearer | 移除监护人 |
+| GET | `/api/guardians/notifications` | Bearer | 未读通知数（申请 + 消息） |
 
 ### 系统
 
@@ -492,6 +517,41 @@ node server/simulator.cjs
 - 交替切换 standing / walking 状态
 - 约每 100 秒触发一次跌倒（自动生成告警）
 - 自动用 admin 账户登录
+
+---
+
+## 种子数据
+
+一键生成演示账户、历史数据和示例消息：
+
+```bash
+cd web/web
+node server/seed.cjs
+```
+
+生成内容包括：
+- **演示账户**：zhangsan / lihua / laowang（密码均为 `demo123`）
+- **监护人关系**：zhangsan + lihua 共同监护 laowang
+- **7 天历史数据**：720 条设备数据，累计 18,381 步
+- **15 条历史告警**：含跌倒 + 久坐，含误报
+- **5 条示例消息**：zhangsan ↔ laowang、lihua ↔ laowang
+
+---
+
+## 在线聊天 — 完整流程
+
+系统实现了类似微信/QQ 的好友申请 + 实时聊天体系：
+
+```
+A 注册登录 → 搜索 B 的用户名 → 发送监护人申请
+  → B 收到 WebSocket 实时推送（右上角红点+1）
+  → B 点进「监护人管理」→「收到的申请」→ 点「同意」
+  → A 收到 WebSocket 推送「申请已通过」
+  → 双方联系人列表出现对方
+  → 双方点击进入聊天 → 发消息 → 对方实时收到 ✅
+```
+
+聊天消息同时写入数据库 + 通过 Socket.io 实时推送到对方客户端。无论网页端还是移动端，都能实时收发。
 
 ---
 
