@@ -1,0 +1,22 @@
+{
+  "name": "行动安全守护系统",
+  "short_name": "安全守护",
+  "description": "摔倒检测与健康监护平台 — 移动端",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F0EC",
+  "theme_color": "#E8725A",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

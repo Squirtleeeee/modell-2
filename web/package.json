@@ -32,6 +32,7 @@
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1",
     "resend": "^6.12.4",
+    "socket.io": "^4.8.3",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

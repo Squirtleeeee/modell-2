@@ -234,4 +234,205 @@ if (User.count() === 0) {
   console.log('[DB] 默认管理员已创建: admin / admin123');
 }
 
-module.exports = { db, User, PasswordReset, Guardianship, VerificationCode };
+// ========== 设备数据 ==========
+const DeviceData = {
+  insert(deviceId, userId, data) {
+    const stmt = db.prepare(`
+      INSERT INTO device_data (device_id, user_id, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, fall_detected, steps, battery, activity, raw_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const a = data.accel || {};
+    const g = data.gyro || {};
+    return stmt.run(
+      deviceId, userId,
+      a.x ?? null, a.y ?? null, a.z ?? null,
+      g.x ?? null, g.y ?? null, g.z ?? null,
+      data.fall_detected ? 1 : 0,
+      data.steps ?? 0,
+      data.battery ?? 100,
+      data.activity || 'standing',
+      JSON.stringify(data)
+    );
+  },
+
+  // 今日汇总（指定用户）
+  todaySummary(userId) {
+    const row = db.prepare(`
+      SELECT
+        COALESCE(SUM(steps), 0) as steps,
+        COALESCE(MAX(battery), 0) as battery,
+        COALESCE(SUM(CASE WHEN fall_detected = 1 THEN 1 ELSE 0 END), 0) as fall_events,
+        COALESCE(SUM(CASE WHEN activity = 'walking' THEN 1 ELSE 0 END), 0) as walk_minutes,
+        COALESCE(SUM(CASE WHEN activity = 'standing' THEN 1 ELSE 0 END), 0) as stand_minutes
+      FROM device_data
+      WHERE user_id = ? AND date(created_at) = date('now')
+    `).get(userId);
+    return {
+      steps: row?.steps || 0,
+      walkDurationMin: row?.walk_minutes || 0,
+      standDurationMin: row?.stand_minutes || 0,
+      fallEvents: row?.fall_events || 0,
+      sedentaryAlerts: 0,
+    };
+  },
+
+  // 小时级活动
+  hourlyActivity(userId) {
+    const rows = db.prepare(`
+      SELECT
+        CAST(strftime('%H', created_at) AS INTEGER) as hour,
+        COALESCE(SUM(steps), 0) as steps,
+        COALESCE(SUM(CASE WHEN activity = 'walking' THEN 1 ELSE 0 END), 0) as walking,
+        COALESCE(SUM(CASE WHEN activity = 'standing' THEN 1 ELSE 0 END), 0) as standing
+      FROM device_data
+      WHERE user_id = ? AND date(created_at) = date('now')
+      GROUP BY strftime('%H', created_at)
+    `).all(userId);
+    const map = {};
+    for (const r of rows) map[r.hour] = r;
+    return Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${hour.toString().padStart(2, '0')}:00`,
+      steps: map[hour]?.steps || 0,
+      standing: map[hour]?.standing || 0,
+      walking: map[hour]?.walking || 0,
+    }));
+  },
+
+  // 7 天趋势
+  weeklyTrend(userId) {
+    const rows = db.prepare(`
+      SELECT
+        date(created_at) as date,
+        COALESCE(SUM(steps), 0) as steps,
+        COALESCE(SUM(CASE WHEN fall_detected = 1 THEN 1 ELSE 0 END), 0) as falls,
+        0 as sedentary
+      FROM device_data
+      WHERE user_id = ? AND created_at >= datetime('now', '-6 days')
+      GROUP BY date(created_at)
+      ORDER BY date(created_at)
+    `).all(userId);
+    const map = {};
+    for (const r of rows) map[r.date] = r;
+    const result = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      result.push({
+        date: label,
+        steps: map[key]?.steps || 0,
+        sedentary: 0,
+        falls: map[key]?.falls || 0,
+      });
+    }
+    return result;
+  },
+
+  // 设备当前状态
+  deviceStatus(deviceId, userId) {
+    const row = db.prepare(`
+      SELECT device_id, battery, activity, created_at
+      FROM device_data
+      WHERE (? IS NULL OR device_id = ?) AND (? IS NULL OR user_id = ?)
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(deviceId, deviceId, userId, userId);
+    if (!row) return null;
+    const online = (Date.now() - new Date(row.created_at).getTime()) < 120000;
+    return {
+      id: row.device_id,
+      status: online ? 'online' : 'offline',
+      battery: row.battery,
+      currentActivity: row.activity,
+      lastHeartbeat: row.created_at,
+    };
+  },
+};
+
+// ========== 告警 ==========
+const Alert = {
+  list(params = {}) {
+    const conditions = ['1=1'];
+    const args = [];
+    if (params.userId) { conditions.push('user_id = ?'); args.push(params.userId); }
+    if (params.type && params.type !== 'all') { conditions.push('type = ?'); args.push(params.type); }
+    if (params.status && params.status !== 'all') { conditions.push('status = ?'); args.push(params.status); }
+    const where = conditions.join(' AND ');
+    const total = db.prepare(`SELECT COUNT(*) as count FROM alerts WHERE ${where}`).get(...args).count;
+    const list = db.prepare(`SELECT * FROM alerts WHERE ${where} ORDER BY created_at DESC`).all(...args);
+    return { list, total };
+  },
+
+  create(data) {
+    const id = `ALT-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    db.prepare(`
+      INSERT INTO alerts (id, device_id, user_id, type, time, status, confidence, duration, location)
+      VALUES (?, ?, ?, ?, ?, 'unhandled', ?, ?, ?)
+    `).run(id, data.deviceId, data.userId, data.type, new Date().toISOString(), data.confidence ?? null, data.duration ?? null, data.location ?? null);
+    return db.prepare('SELECT * FROM alerts WHERE id = ?').get(id);
+  },
+
+  updateStatus(id, status, note) {
+    db.prepare(`
+      UPDATE alerts SET status = ?, handler_note = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(status, note || null, id);
+    return db.prepare('SELECT * FROM alerts WHERE id = ?').get(id);
+  },
+};
+
+// ========== 消息 ==========
+const Message = {
+  send(fromUserId, toUserId, content) {
+    const stmt = db.prepare(`
+      INSERT INTO messages (from_user_id, to_user_id, content) VALUES (?, ?, ?)
+    `);
+    const result = stmt.run(fromUserId, toUserId, content);
+    return db.prepare(`
+      SELECT m.*, u.username as from_username FROM messages m
+      JOIN users u ON u.id = m.from_user_id
+      WHERE m.id = ?
+    `).get(result.lastInsertRowid);
+  },
+
+  // 两人的对话历史
+  conversation(user1, user2, limit = 50) {
+    return db.prepare(`
+      SELECT m.*, u.username as from_username FROM messages m
+      JOIN users u ON u.id = m.from_user_id
+      WHERE (m.from_user_id = ? AND m.to_user_id = ?) OR (m.from_user_id = ? AND m.to_user_id = ?)
+      ORDER BY m.created_at ASC
+      LIMIT ?
+    `).all(user1, user2, user2, user1, limit);
+  },
+
+  // 与我相关的最近对话列表
+  recentContacts(userId) {
+    return db.prepare(`
+      SELECT DISTINCT
+        CASE WHEN m.from_user_id = ? THEN m.to_user_id ELSE m.from_user_id END as contact_id,
+        u.username,
+        (SELECT content FROM messages WHERE (from_user_id = ? AND to_user_id = u.id) OR (from_user_id = u.id AND to_user_id = ?) ORDER BY created_at DESC LIMIT 1) as last_msg,
+        (SELECT created_at FROM messages WHERE (from_user_id = ? AND to_user_id = u.id) OR (from_user_id = u.id AND to_user_id = ?) ORDER BY created_at DESC LIMIT 1) as last_time
+      FROM messages m
+      JOIN users u ON u.id = CASE WHEN m.from_user_id = ? THEN m.to_user_id ELSE m.from_user_id END
+      WHERE m.from_user_id = ? OR m.to_user_id = ?
+      ORDER BY last_time DESC
+    `).all(userId, userId, userId, userId, userId, userId, userId);
+  },
+
+  markRead(fromUserId, toUserId) {
+    db.prepare(`
+      UPDATE messages SET read = 1 WHERE from_user_id = ? AND to_user_id = ? AND read = 0
+    `).run(fromUserId, toUserId);
+  },
+
+  unreadCount(userId) {
+    const row = db.prepare(`
+      SELECT COUNT(*) as count FROM messages WHERE to_user_id = ? AND read = 0
+    `).get(userId);
+    return row.count;
+  },
+};
+
+module.exports = { db, User, PasswordReset, Guardianship, VerificationCode, DeviceData, Alert, Message };

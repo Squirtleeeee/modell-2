@@ -41,6 +41,59 @@ const migrations = [
       `);
     },
   },
+  {
+    name: '003_create_device_alerts_messages',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS device_data (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          device_id TEXT NOT NULL,
+          user_id INTEGER,
+          accel_x REAL, accel_y REAL, accel_z REAL,
+          gyro_x REAL, gyro_y REAL, gyro_z REAL,
+          fall_detected INTEGER DEFAULT 0,
+          steps INTEGER DEFAULT 0,
+          battery INTEGER DEFAULT 100,
+          activity TEXT DEFAULT 'standing',
+          raw_json TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_device_user ON device_data(device_id, user_id);
+        CREATE INDEX IF NOT EXISTS idx_device_time ON device_data(created_at);
+
+        CREATE TABLE IF NOT EXISTS alerts (
+          id TEXT PRIMARY KEY,
+          device_id TEXT NOT NULL,
+          user_id INTEGER,
+          type TEXT NOT NULL,
+          time TEXT NOT NULL DEFAULT (datetime('now')),
+          status TEXT NOT NULL DEFAULT 'unhandled',
+          confidence REAL,
+          duration INTEGER,
+          location TEXT,
+          handler_note TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id);
+        CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
+
+        CREATE TABLE IF NOT EXISTS messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_user_id INTEGER NOT NULL,
+          to_user_id INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          read INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (from_user_id) REFERENCES users(id),
+          FOREIGN KEY (to_user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_users ON messages(from_user_id, to_user_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_time ON messages(created_at);
+      `);
+    },
+  },
 ];
 
 function runMigrations() {
