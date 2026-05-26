@@ -10,6 +10,7 @@ import Alerts from './pages/Alerts';
 import Device from './pages/Device';
 import Guardians from './pages/Guardians';
 import Messages from './pages/Messages';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/settings" element={<Settings />} />
 
               {/* 受保护页面 — 移动端底部 Tab 布局 */}
               <Route

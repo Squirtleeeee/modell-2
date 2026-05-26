@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
-const getServerUrl = () => localStorage.getItem('server_url') || 'http://192.168.1.165:3001';
+const getServerUrl = () => localStorage.getItem('server_url') || '';
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const socket = io(getServerUrl(), { transports: ['websocket', 'polling'] });
+    const url = getServerUrl();
+    if (!url) return;
+
+    const socket = io(url, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));

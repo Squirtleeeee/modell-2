@@ -7,6 +7,7 @@ import {
   SetOutline,
   TeamOutline,
   MessageOutline,
+  SetOutline as SettingOutline,
 } from 'antd-mobile-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -56,15 +57,37 @@ export default function MobileLayout() {
               </Text>
             </div>
           </div>
-          <Badge dot={!isOnline} color="#E05555">
-            <Text
-              type="secondary"
-              style={{ fontSize: 12, cursor: 'pointer' }}
-              onClick={() => { logout(); navigate('/login', { replace: true }); }}
-            >
-              退出
-            </Text>
-          </Badge>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <SettingOutline
+              style={{ fontSize: 20, color: '#3D322C', cursor: 'pointer' }}
+              onClick={() => navigate('/settings')}
+            />
+            <Badge dot={!isOnline} color="#E05555">
+              <Text
+                type="secondary"
+                style={{ fontSize: 12, cursor: 'pointer' }}
+                onClick={() => { logout(); navigate('/login', { replace: true }); }}
+              >
+                退出
+              </Text>
+            </Badge>
+          </div>
+        </div>
+      )}
+      {/* 登录页的简洁顶栏（含设置入口，方便未登录时配置服务器） */}
+      {isAuthPage && (
+        <div style={{
+          background: '#fff',
+          padding: '10px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          borderBottom: '1px solid #E8E0D8',
+        }}>
+          <SettingOutline
+            style={{ fontSize: 20, color: '#3D322C', cursor: 'pointer' }}
+            onClick={() => navigate('/settings')}
+          />
         </div>
       )}
 

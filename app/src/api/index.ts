@@ -10,9 +10,11 @@ import {
 } from '../mock/data';
 import type { AlertRecord } from '../mock/data';
 
-// ========== 配置：修改为你的后端地址 ==========
-const SERVER_URL = localStorage.getItem('server_url') || 'http://192.168.1.100:3001';
 const TOKEN_KEY = 'token';
+
+function getServerUrl(): string {
+  return localStorage.getItem('server_url') || '';
+}
 
 function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -27,7 +29,12 @@ async function request<T>(path: string, options?: RequestInit, fallback?: T): Pr
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   try {
-    const res = await fetch(`${SERVER_URL}${path}`, { ...options, headers });
+    const serverUrl = getServerUrl();
+    if (!serverUrl) {
+      if (fallback !== undefined) return fallback;
+      throw new Error('未配置服务器地址，请点击右上角齿轮图标设置');
+    }
+    const res = await fetch(`${serverUrl}${path}`, { ...options, headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: '请求失败' }));
       throw new Error(err.error || `HTTP ${res.status}`);
@@ -169,4 +176,3 @@ export const getMqttStatus = async () => {
 };
 
 // 导出服务器地址，供设置页面使用
-export { SERVER_URL };
