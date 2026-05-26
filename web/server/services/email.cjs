@@ -1,42 +1,63 @@
-// 邮件发送服务 — QQ邮箱 SMTP
-const nodemailer = require('nodemailer');
-
+// 邮件发送服务 — Resend API (优先) / QQ邮箱 SMTP (备用) / Mock (兜底)
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.qq.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 
-let transporter = null;
+let resendClient = null;
+let smtpTransporter = null;
 
-function getTransporter() {
+function getResend() {
+  if (!RESEND_API_KEY) return null;
+  if (!resendClient) {
+    const { Resend } = require('resend');
+    resendClient = new Resend(RESEND_API_KEY);
+  }
+  return resendClient;
+}
+
+function getSmtp() {
   if (!SMTP_USER || !SMTP_PASS) return null;
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
+  if (!smtpTransporter) {
+    const nodemailer = require('nodemailer');
+    smtpTransporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_PORT === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
     });
   }
-  return transporter;
+  return smtpTransporter;
 }
 
 async function sendEmail(to, subject, html) {
-  const transport = getTransporter();
-  if (!transport) {
-    console.log(`\n[Email Mock] 收件人: ${to}`);
-    console.log(`[Email Mock] 主题: ${subject}`);
-    console.log(`[Email Mock] 内容: ${html.replace(/<[^>]+>/g, '').trim()}\n`);
-    return { success: true, mock: true, messageId: 'mock-' + Date.now() };
+  // 1. 优先用 Resend
+  const resend = getResend();
+  if (resend) {
+    const from = process.env.RESEND_FROM || '行动安全守护系统 <onboarding@resend.dev>';
+    const { data, error } = await resend.emails.send({ from, to, subject, html });
+    if (error) {
+      console.error('[Resend] 发送失败:', error.message);
+      throw new Error('邮件发送失败: ' + error.message);
+    }
+    console.log('[Resend] 已发送至', to, '| ID:', data?.id);
+    return { success: true, mock: false, provider: 'resend', messageId: data?.id };
   }
 
-  const info = await transport.sendMail({
-    from: SMTP_USER,
-    to,
-    subject,
-    html,
-  });
-  return { success: true, mock: false, messageId: info.messageId };
+  // 2. 备用 SMTP
+  const smtp = getSmtp();
+  if (smtp) {
+    const info = await smtp.sendMail({ from: SMTP_USER, to, subject, html });
+    console.log('[SMTP] 已发送至', to, '| ID:', info.messageId);
+    return { success: true, mock: false, provider: 'smtp', messageId: info.messageId };
+  }
+
+  // 3. 兜底 Mock
+  console.log(`\n[Email Mock] 收件人: ${to}`);
+  console.log(`[Email Mock] 主题: ${subject}`);
+  console.log(`[Email Mock] 内容: ${html.replace(/<[^>]+>/g, '').trim()}\n`);
+  return { success: true, mock: true, provider: 'mock', messageId: 'mock-' + Date.now() };
 }
 
 async function sendVerificationCodeEmail(to, code) {

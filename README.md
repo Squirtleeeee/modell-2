@@ -46,7 +46,8 @@
 | 数据库 | SQLite (better-sqlite3) | — |
 | 认证 | JWT (jsonwebtoken) | — |
 | 密码哈希 | PBKDF2-SHA512 (Node.js crypto) | — |
-| 邮件服务 | Nodemailer (QQ邮箱 SMTP) | — |
+| 邮件服务 | Resend API / Nodemailer (SMTP) / Mock 三级降级 | — |
+| 邮件 SDK | Resend + Nodemailer | — |
 | 短信服务 | 阿里云短信 SDK (Mock fallback) | — |
 | 频率限制 | express-rate-limit | — |
 | AI 推理引擎 | TFLite Micro / Ethos-U55 NPU | 嵌入式端 |
@@ -75,7 +76,7 @@
 │           │                                                  │
 │  ┌────────┴─────────────────────────────────────────┐       │
 │  │              SQLite 数据库 (data.db)               │       │
-│  │  users · password_resets · guardianships          │       │
+│  │  users · password_resets · guardianships · verification_codes │       │
 │  └──────────────────────────────────────────────────┘       │
 └─────────────────────────────────────────────────────────────┘
                        ▲
@@ -371,7 +372,7 @@ web/
 │   │   └── rateLimit.cjs          # API 频率限制 (发送/校验/登录/注册)
 │   ├── routes/auth.cjs            # 认证路由 (注册/登录/找回密码/验证码)
 │   └── services/
-│       ├── email.cjs              # 邮件发送 (QQ邮箱 SMTP + Mock fallback)
+│       ├── email.cjs              # 邮件发送 (Resend / SMTP / Mock 三级降级)
 │       └── sms.cjs                # 短信发送 (阿里云 + Mock fallback)
 │
 ├── src/                           # React 前端
@@ -415,23 +416,36 @@ web/
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `SMTP_USER` | QQ 邮箱地址 | (空，使用 Mock) |
-| `SMTP_PASS` | QQ 邮箱授权码（非密码） | (空，使用 Mock) |
+| `RESEND_API_KEY` | Resend API Key（`re_` 开头） | (空) |
+| `RESEND_FROM` | 发件人地址，如 `系统名称 <noreply@你的域名.com>` | `onboarding@resend.dev` |
+| `SMTP_USER` | QQ 邮箱地址（备用） | (空) |
+| `SMTP_PASS` | QQ 邮箱授权码（备用） | (空) |
 | `SMS_PROVIDER` | 短信提供商：`alicloud` / `mock` | `mock` |
 | `ALICLOUD_ACCESS_KEY_ID` | 阿里云 AccessKey | (空，使用 Mock) |
 | `ALICLOUD_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | (空，使用 Mock) |
 | `ALICLOUD_SMS_SIGN_NAME` | 短信签名 | `行动安全守护` |
 | `ALICLOUD_SMS_TEMPLATE_CODE` | 短信模板 ID | (空，使用 Mock) |
 
-**启用 QQ 邮箱：**
+**邮件发送策略（三级降级）：**
+
+1. Resend API → 2. QQ邮箱 SMTP → 3. Mock（控制台打印）
+
+**启用 Resend（推荐，支持任意邮箱）：**
 ```bash
-# Windows PowerShell
-$env:SMTP_USER="your-qq@qq.com"
-$env:SMTP_PASS="your_authorization_code"
+# Windows
+set RESEND_API_KEY=re_xxxxxxxx
+npm run server
 
 # Linux / macOS
-export SMTP_USER="your-qq@qq.com"
-export SMTP_PASS="your_authorization_code"
+export RESEND_API_KEY="re_xxxxxxxx"
+```
+
+> Resend 免费 100 封/天。测试模式下仅发给自己的邮箱；验证域名后可发给任意用户。注册：`https://resend.com`
+
+**启用 QQ 邮箱（备用）：**
+```bash
+set SMTP_USER=your-qq@qq.com
+set SMTP_PASS=your_authorization_code
 ```
 
 QQ 邮箱授权码获取：QQ邮箱 → 设置 → 账户 → POP3/SMTP 服务 → 开启并获取授权码。
@@ -459,9 +473,27 @@ npm run server              # 端口 3001，API + 静态文件统一端口
 
 ### 一键公网访问
 
+**临时隧道（每次域名随机）：**
+
 ```bash
 start-tunnel.bat            # 自动构建 → 启动服务 → SSH 隧道
 ```
+
+**固定域名隧道（推荐，需先配置）：**
+
+1. 注册 [Serveo](https://console.serveo.net) 账号，添加 SSH 公钥
+2. 在 Domains 页面预约固定子域名（如 `mobility-guardian`）
+3. 启动：
+
+```bash
+# 窗口 1
+npm run build && npm run server
+
+# 窗口 2（用预约时的密钥）
+ssh -i ~/.ssh/id_rsa_serveo -R 你的名字:80:localhost:3001 serveo.net
+```
+
+> 详细步骤见 [快速启动教程](../快速启动教程.md) 中的「部署到公网」章节。
 
 ---
 
@@ -483,12 +515,29 @@ node oss-deploy.cjs upload
 ```
 需在 OSS 控制台关闭「强制下载」。详见 `DEPLOY.md`。
 
-### 方式 3：Serveo SSH 隧道 (测试)
+### 方式 3：Serveo SSH 隧道 (推荐演示/测试)
+
+免费、无需服务器，得到一个固定的公网域名。
+
+**准备工作（只需做一次）：**
+
+1. 生成 SSH 密钥：`ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_serveo -N ""`
+2. 注册 [Serveo](https://console.serveo.net) → SSH Keys → 添加公钥（`~/.ssh/id_rsa_serveo.pub`）
+3. Domains → Add Domain → 预约固定子域名
+
+**每次启动：**
 
 ```bash
-npm run build && node server/index.cjs &
-ssh -R 80:localhost:3001 serveo.net
+# 窗口 1：本地服务
+npm run build && npm run server
+
+# 窗口 2：公网隧道
+ssh -i ~/.ssh/id_rsa_serveo -R 你的名字:80:localhost:3001 serveo.net
 ```
+
+访问 `https://你的名字.serveousercontent.com`。
+
+> `-i` 参数指定注册时用的密钥，不可省略。详细教程见 [快速启动教程](../快速启动教程.md)。
 
 ---
 
