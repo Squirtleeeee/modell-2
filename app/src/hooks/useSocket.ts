@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
-const getServerUrl = () => localStorage.getItem('server_url') || '';
+const DEFAULT_SERVER = 'https://mobility-guardian.serveousercontent.com';
+const getServerUrl = () => localStorage.getItem('server_url') || DEFAULT_SERVER;
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);

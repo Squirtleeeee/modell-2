@@ -12,8 +12,10 @@ import type { AlertRecord } from '../mock/data';
 
 const TOKEN_KEY = 'token';
 
+const DEFAULT_SERVER = 'https://mobility-guardian.serveousercontent.com';
+
 function getServerUrl(): string {
-  return localStorage.getItem('server_url') || '';
+  return localStorage.getItem('server_url') || DEFAULT_SERVER;
 }
 
 function getToken(): string | null {

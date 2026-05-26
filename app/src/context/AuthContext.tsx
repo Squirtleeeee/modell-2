@@ -57,7 +57,8 @@ function loadState(): AuthState {
   return { user: null, token: null, loading: false };
 }
 
-const getServerUrl = () => localStorage.getItem('server_url') || '';
+const DEFAULT_SERVER = 'https://mobility-guardian.serveousercontent.com';
+const getServerUrl = () => localStorage.getItem('server_url') || DEFAULT_SERVER;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(loadState);

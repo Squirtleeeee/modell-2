@@ -13,7 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [smsSeconds, setSmsSeconds] = useState(0);
   const from = (location.state as { from?: string })?.from || '/';
-  const serverUrl = localStorage.getItem('server_url');
+  const serverUrl = localStorage.getItem('server_url') || 'https://mobility-guardian.serveousercontent.com';
 
   // SMS countdown
   const startSmsCountdown = () => {
@@ -168,17 +168,15 @@ export default function Login() {
   return (
     <Flex justify="center" align="center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F5F0EC 0%, #EDE5DB 100%)', padding: 16 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
-        {!serverUrl && (
+        {!localStorage.getItem('server_url') && (
           <div style={{
-            background: '#FFF7E6', border: '1px solid #FFD591', borderRadius: 8,
-            padding: '12px 14px', marginBottom: 16, fontSize: 13,
+            background: '#F0FAF7', border: '1px solid #A7E0D0', borderRadius: 8,
+            padding: '8px 14px', marginBottom: 16, fontSize: 12,
           }}>
-            <Text strong style={{ color: '#D46B08', fontSize: 14 }}>首次使用请先配置服务器</Text>
-            <br />
-            <Text style={{ fontSize: 12 }}>点击右上角齿轮图标 → 输入后端地址 → 测试连接 → 保存</Text>
+            <Text type="secondary">当前服务器：{serverUrl}</Text>
             <br />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              同 WiFi：http://电脑IP:3001 公网：https://域名
+              如需修改，点击右上角齿轮图标
             </Text>
           </div>
         )}
