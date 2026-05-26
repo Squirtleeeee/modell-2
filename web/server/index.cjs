@@ -10,8 +10,7 @@ const dashboardRoutes = require('./routes/dashboard.cjs');
 const deviceRoutes = require('./routes/device.cjs');
 const alertsRoutes = require('./routes/alerts.cjs');
 const messagesRoutes = require('./routes/messages.cjs');
-const { User, Guardianship } = require('./database.cjs');
-const { requireAuth } = require('./middleware/auth.cjs');
+const guardianRoutes = require('./routes/guardians.cjs');
 
 // 运行数据库迁移
 runMigrations();
@@ -33,34 +32,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/guardians', guardianRoutes);
 app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-
-// 监护人路由
-app.get('/api/guardians', requireAuth, (req, res) => {
-  const guardians = Guardianship.myGuardians(req.user.id);
-  const wards = Guardianship.myWards(req.user.id);
-  res.json({ guardians, wards });
-});
-app.post('/api/guardians', requireAuth, (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: '请输入用户名' });
-  const guardian = User.findByUsername(username);
-  if (!guardian) return res.status(404).json({ error: '用户不存在' });
-  try {
-    Guardianship.addGuardian(req.user.id, guardian.id);
-    res.status(201).json({ guardian: User.findById(guardian.id) });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-app.delete('/api/guardians/:id', requireAuth, (req, res) => {
-  const guardianId = parseInt(req.params.id);
-  if (!Guardianship.isGuardian(req.user.id, guardianId)) {
-    return res.status(404).json({ error: '未找到该监护人关系' });
-  }
-  Guardianship.removeGuardian(req.user.id, guardianId);
-  res.json({ message: '已移除监护人' });
-});
 
 // WebSocket 连接管理
 io.on('connection', (socket) => {

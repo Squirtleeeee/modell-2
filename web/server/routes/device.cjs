@@ -30,6 +30,28 @@ router.post('/data', requireAuth, (req, res) => {
     });
   }
 
+  // 通过 WebSocket 广播最新数据给该用户的监护人
+  const io = req.app.get('io');
+  if (io) {
+    const { Guardianship } = require('../database.cjs');
+    const guardianIds = Guardianship.guardianIdsOf(req.user.id);
+    guardianIds.forEach((gid) => io.to(`user:${gid}`).emit('device_update', {
+      userId: req.user.id,
+      steps,
+      battery,
+      activity,
+      fall_detected: !!fall_detected,
+    }));
+    // 也推送给用户自己
+    io.to(`user:${req.user.id}`).emit('device_update', {
+      userId: req.user.id,
+      steps,
+      battery,
+      activity,
+      fall_detected: !!fall_detected,
+    });
+  }
+
   res.json({ success: true });
 });
 

@@ -132,7 +132,7 @@ export const updateDeviceConfig = async (config: Record<string, unknown>) => {
 
 // ========== 消息 API ==========
 
-export const fetchContacts = async () => {
+export const fetchContacts = async (): Promise<{ contact_id: number; username: string; last_msg: string; last_time: string }[]> => {
   try {
     return await request<{ contact_id: number; username: string; last_msg: string; last_time: string }[]>('/api/messages/contacts');
   } catch {
@@ -140,9 +140,9 @@ export const fetchContacts = async () => {
   }
 };
 
-export const fetchMessages = async (userId: number) => {
+export const fetchMessages = async (userId: number): Promise<unknown[]> => {
   try {
-    return await request(`/api/messages/${userId}`);
+    return await request<unknown[]>(`/api/messages/${userId}`);
   } catch {
     return [];
   }

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout as AntLayout, Menu, Badge, Avatar, Dropdown, Typography, Tag, Button, Drawer } from 'antd';
+import { useSocket } from '../../hooks/useSocket';
 import {
   DashboardOutlined,
   AlertOutlined,
@@ -12,6 +13,7 @@ import {
   CrownOutlined,
   MenuOutlined,
   CloseOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import { useIsMobile } from '../../hooks/useMediaQuery';
@@ -19,21 +21,41 @@ import { useIsMobile } from '../../hooks/useMediaQuery';
 const { Sider, Header, Content } = AntLayout;
 const { Text } = Typography;
 
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: '数据看板' },
-  { key: '/alerts', icon: <AlertOutlined />, label: '报警记录' },
-  { key: '/device', icon: <SettingOutlined />, label: '设备管理' },
-  { key: '/guardians', icon: <TeamOutlined />, label: '监护人管理' },
-];
-
 export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin } = useAuth();
+  const { join, on } = useSocket();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [unreadAlerts] = useState(1);
+  const [notifCount, setNotifCount] = useState(0);
   const isMobile = useIsMobile();
+
+  // 实时通知计数
+  useEffect(() => {
+    if (user) join(user.id);
+  }, [user, join]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const fetchCount = () => {
+      fetch('/api/guardians/notifications', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json()).then(d => setNotifCount(d.total || 0)).catch(() => {});
+    };
+    fetchCount();
+    const unsub1 = on('new_request', fetchCount);
+    const unsub2 = on('new_message', fetchCount);
+    return () => { unsub1(); unsub2(); };
+  }, [on]);
+
+  const menuItems = [
+    { key: '/', icon: <DashboardOutlined />, label: '数据看板' },
+    { key: '/alerts', icon: <AlertOutlined />, label: '报警记录' },
+    { key: '/device', icon: <SettingOutlined />, label: '设备管理' },
+    { key: '/guardians', icon: <TeamOutlined />, label: (<>监护人管理 {notifCount > 0 && <Badge count={notifCount} size="small" offset={[6, 0]} />}</>) },
+    { key: '/messages', icon: <MessageOutlined />, label: '消息' },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -177,7 +199,7 @@ export default function AppLayout() {
               {isMobile ? '' : '管理员'}
             </Tag>
           )}
-          <Badge count={unreadAlerts} size="small" offset={[-2, 2]}>
+          <Badge count={notifCount} size="small" offset={[-2, 2]}>
             <BellOutlined
               style={{ fontSize: 18, marginRight: isMobile ? 12 : 24, cursor: 'pointer' }}
               onClick={() => navigate('/alerts')}

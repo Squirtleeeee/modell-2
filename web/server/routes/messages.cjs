@@ -5,9 +5,35 @@ const { requireAuth } = require('../middleware/auth.cjs');
 
 const router = Router();
 
-// GET /api/messages/contacts — 最近联系人列表
+// GET /api/messages/contacts — 最近联系人列表（含监护关系）
 router.get('/contacts', requireAuth, (req, res) => {
-  res.json(Message.recentContacts(req.user.id));
+  const { Guardianship, User } = require('../database.cjs');
+  const msgContacts = Message.recentContacts(req.user.id);
+  const guardianList = Guardianship.myGuardians(req.user.id);
+  const wardList = Guardianship.myWards(req.user.id);
+
+  // 合并消息联系人和监护人/被监护人，去重
+  const seen = new Set();
+  const allContacts = [];
+
+  for (const c of msgContacts) {
+    seen.add(c.contact_id);
+    allContacts.push(c);
+  }
+
+  for (const g of [...guardianList, ...wardList]) {
+    if (!seen.has(g.id)) {
+      seen.add(g.id);
+      allContacts.push({
+        contact_id: g.id,
+        username: g.username,
+        last_msg: null,
+        last_time: null,
+      });
+    }
+  }
+
+  res.json(allContacts);
 });
 
 // GET /api/messages/:userId — 与某用户的对话

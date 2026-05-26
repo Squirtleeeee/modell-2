@@ -19,6 +19,7 @@ import {
   fetchWeeklyTrend,
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
+import { useSocket } from '../../hooks/useSocket';
 import { mockAlerts } from '../../mock/data';
 
 const { Title, Text } = Typography;
@@ -38,22 +39,33 @@ export default function Dashboard() {
   const [recentAlerts, setRecentAlerts] = useState<AlertRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = antTheme.useToken();
+  const { connected, join, on } = useSocket();
+
+  const loadData = async () => {
+    const [ov, hourly, weekly] = await Promise.all([
+      fetchDashboardOverview(),
+      fetchHourlyActivity(),
+      fetchWeeklyTrend(),
+    ]);
+    setOverview(ov);
+    setHourlyData(hourly);
+    setWeeklyTrend(weekly);
+    setRecentAlerts(mockAlerts.slice(0, 3));
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   useEffect(() => {
-    const load = async () => {
-      const [ov, hourly, weekly] = await Promise.all([
-        fetchDashboardOverview(),
-        fetchHourlyActivity(),
-        fetchWeeklyTrend(),
-      ]);
-      setOverview(ov);
-      setHourlyData(hourly);
-      setWeeklyTrend(weekly);
-      setRecentAlerts(mockAlerts.slice(0, 3));
-      setLoading(false);
-    };
-    load();
-  }, []);
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try { const u = JSON.parse(userStr); if (u.id) join(u.id); } catch { /* ignore */ }
+    }
+  }, [connected]);
+
+  useEffect(() => {
+    return on('device_update', () => { loadData(); });
+  }, [on]);
 
   if (loading) {
     return (

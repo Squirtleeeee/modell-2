@@ -6,6 +6,7 @@ import {
   UnorderedListOutline,
   SetOutline,
   TeamOutline,
+  MessageOutline,
 } from 'antd-mobile-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -17,6 +18,7 @@ const tabs = [
   { key: '/alerts', icon: <UnorderedListOutline />, title: '告警' },
   { key: '/device', icon: <SetOutline />, title: '设备' },
   { key: '/guardians', icon: <TeamOutline />, title: '守护' },
+  { key: '/messages', icon: <MessageOutline />, title: '消息' },
 ];
 
 export default function MobileLayout() {

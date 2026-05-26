@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Alerts from './pages/Alerts';
 import Device from './pages/Device';
 import Guardians from './pages/Guardians';
+import Messages from './pages/Messages';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -38,6 +39,7 @@ export default function App() {
                 <Route path="alerts" element={<Alerts />} />
                 <Route path="device" element={<Device />} />
                 <Route path="guardians" element={<Guardians />} />
+                <Route path="messages" element={<Messages />} />
               </Route>
             </Routes>
           </HashRouter>

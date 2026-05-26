@@ -418,7 +418,7 @@ const Message = {
       JOIN users u ON u.id = CASE WHEN m.from_user_id = ? THEN m.to_user_id ELSE m.from_user_id END
       WHERE m.from_user_id = ? OR m.to_user_id = ?
       ORDER BY last_time DESC
-    `).all(userId, userId, userId, userId, userId, userId, userId);
+    `).all(userId, userId, userId, userId, userId, userId, userId, userId);
   },
 
   markRead(fromUserId, toUserId) {
@@ -435,4 +435,65 @@ const Message = {
   },
 };
 
-module.exports = { db, User, PasswordReset, Guardianship, VerificationCode, DeviceData, Alert, Message };
+// ========== 监护人申请 ==========
+const GuardianRequest = {
+  // A 申请监护 B
+  create(fromUserId, toUserId) {
+    if (fromUserId === toUserId) throw new Error('不能对自己发起申请');
+    if (Guardianship.isGuardian(toUserId, fromUserId)) throw new Error('已是监护人关系');
+    try {
+      db.prepare('INSERT INTO guardian_requests (from_user_id, to_user_id) VALUES (?, ?)').run(fromUserId, toUserId);
+      return db.prepare('SELECT * FROM guardian_requests WHERE from_user_id = ? AND to_user_id = ?').get(fromUserId, toUserId);
+    } catch (e) {
+      if (e.message?.includes('UNIQUE')) throw new Error('已有待处理的申请');
+      throw e;
+    }
+  },
+
+  // 我收到的申请
+  pendingForMe(userId) {
+    return db.prepare(`
+      SELECT r.*, u.username as from_username, u.email as from_email
+      FROM guardian_requests r
+      JOIN users u ON u.id = r.from_user_id
+      WHERE r.to_user_id = ? AND r.status = 'pending'
+      ORDER BY r.created_at DESC
+    `).all(userId);
+  },
+
+  // 我发出的申请
+  sentByMe(userId) {
+    return db.prepare(`
+      SELECT r.*, u.username as to_username
+      FROM guardian_requests r
+      JOIN users u ON u.id = r.to_user_id
+      WHERE r.from_user_id = ? AND r.status = 'pending'
+      ORDER BY r.created_at DESC
+    `).all(userId);
+  },
+
+  // 同意申请
+  accept(requestId, userId) {
+    const req = db.prepare('SELECT * FROM guardian_requests WHERE id = ? AND to_user_id = ? AND status = ?').get(requestId, userId, 'pending');
+    if (!req) throw new Error('申请不存在或已处理');
+    db.prepare("UPDATE guardian_requests SET status = 'accepted', updated_at = datetime('now') WHERE id = ?").run(requestId);
+    Guardianship.addGuardian(req.to_user_id, req.from_user_id);
+    return req;
+  },
+
+  // 拒绝申请
+  reject(requestId, userId) {
+    const req = db.prepare('SELECT * FROM guardian_requests WHERE id = ? AND to_user_id = ? AND status = ?').get(requestId, userId, 'pending');
+    if (!req) throw new Error('申请不存在或已处理');
+    db.prepare("UPDATE guardian_requests SET status = 'rejected', updated_at = datetime('now') WHERE id = ?").run(requestId);
+    return req;
+  },
+
+  // 未读申请数
+  pendingCount(userId) {
+    const row = db.prepare('SELECT COUNT(*) as count FROM guardian_requests WHERE to_user_id = ? AND status = ?').get(userId, 'pending');
+    return row.count;
+  },
+};
+
+module.exports = { db, User, PasswordReset, Guardianship, VerificationCode, DeviceData, Alert, Message, GuardianRequest };

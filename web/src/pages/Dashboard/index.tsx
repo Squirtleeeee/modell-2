@@ -19,6 +19,7 @@ import {
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
 import { mockAlerts } from '../../mock/data';
+import { useSocket } from '../../hooks/useSocket';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Title, Text } = Typography;
@@ -77,22 +78,32 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const { token } = antTheme.useToken();
   const isMobile = useIsMobile();
+  const { connected, join, on } = useSocket();
+
+  const loadData = async () => {
+    const [ov, hourly, weekly] = await Promise.all([
+      fetchDashboardOverview(),
+      fetchHourlyActivity(),
+      fetchWeeklyTrend(),
+    ]);
+    setOverview(ov);
+    setHourlyData(hourly);
+    setWeeklyTrend(weekly);
+    setRecentAlerts(mockAlerts.slice(0, 5));
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  // WebSocket 实时刷新
+  useEffect(() => {
+    const { user } = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user?.id) join(user.id);
+  }, [connected]);
 
   useEffect(() => {
-    const load = async () => {
-      const [ov, hourly, weekly] = await Promise.all([
-        fetchDashboardOverview(),
-        fetchHourlyActivity(),
-        fetchWeeklyTrend(),
-      ]);
-      setOverview(ov);
-      setHourlyData(hourly);
-      setWeeklyTrend(weekly);
-      setRecentAlerts(mockAlerts.slice(0, 5));
-      setLoading(false);
-    };
-    load();
-  }, []);
+    return on('device_update', () => { loadData(); });
+  }, [on]);
 
   if (loading) {
     return (
