@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Form, Input, Button, Typography, message, Flex } from 'antd';
-import { UserOutlined, MailOutlined, LockOutlined, PhoneOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { UserOutlined, MailOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 
 const { Title, Text } = Typography;
@@ -42,11 +42,10 @@ export default function Register() {
     email: string;
     password: string;
     emailCode: string;
-    phone?: string;
   }) => {
     setLoading(true);
     try {
-      await register(values.username, values.email, values.password, values.emailCode, values.phone);
+      await register(values.username, values.email, values.password, values.emailCode);
       message.success('注册成功');
       navigate('/', { replace: true });
     } catch (err: unknown) {
@@ -89,11 +88,6 @@ export default function Register() {
             />
           </Form.Item>
 
-          <Form.Item name="phone" rules={[
-            { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' },
-          ]}>
-            <Input prefix={<PhoneOutlined />} placeholder="手机号（选填）" />
-          </Form.Item>
 
           <Form.Item name="password" rules={[
             { required: true, message: '请输入密码' },
