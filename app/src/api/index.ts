@@ -12,7 +12,7 @@ import type { AlertRecord } from '../mock/data';
 
 const TOKEN_KEY = 'token';
 
-const DEFAULT_SERVER = 'https://mobility-guardian.serveousercontent.com';
+const DEFAULT_SERVER = 'https://modell-2-production.up.railway.app';
 
 function getServerUrl(): string {
   return localStorage.getItem('server_url') || DEFAULT_SERVER;

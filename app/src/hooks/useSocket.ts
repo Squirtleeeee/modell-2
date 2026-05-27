@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
-const DEFAULT_SERVER = 'https://mobility-guardian.serveousercontent.com';
+const DEFAULT_SERVER = 'https://modell-2-production.up.railway.app';
 const getServerUrl = () => localStorage.getItem('server_url') || DEFAULT_SERVER;
 
 export function useSocket() {

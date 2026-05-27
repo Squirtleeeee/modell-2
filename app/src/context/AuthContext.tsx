@@ -57,7 +57,7 @@ function loadState(): AuthState {
   return { user: null, token: null, loading: false };
 }
 
-const DEFAULT_SERVER = 'https://mobility-guardian.serveousercontent.com';
+const DEFAULT_SERVER = 'https://modell-2-production.up.railway.app';
 const getServerUrl = () => localStorage.getItem('server_url') || DEFAULT_SERVER;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
