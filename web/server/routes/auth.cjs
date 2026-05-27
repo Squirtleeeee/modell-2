@@ -128,7 +128,9 @@ router.post('/send-email-code', sendCodeLimiter, async (req, res) => {
     console.error('[Email] 发送失败:', e.message);
   }
 
-  res.json({ message: '验证码已发送至您的邮箱，5分钟内有效' });
+  // Mock 模式下返回验证码，方便测试
+  const isMock = !process.env.RESEND_API_KEY && !process.env.SMTP_USER;
+  res.json({ message: '验证码已发送', code: isMock ? code : undefined });
 });
 
 // POST /api/auth/send-sms-code — 发送短信验证码
@@ -165,7 +167,8 @@ router.post('/send-sms-code', sendCodeLimiter, async (req, res) => {
     console.error('[SMS] 发送失败:', e.message);
   }
 
-  res.json({ message: '验证码已发送' });
+  const isSmsMock = process.env.SMS_PROVIDER !== 'alicloud' || !process.env.ALICLOUD_ACCESS_KEY_ID;
+  res.json({ message: '验证码已发送', code: isSmsMock ? code : undefined });
 });
 
 // POST /api/auth/verify-code — 通用验证码校验
