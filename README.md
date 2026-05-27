@@ -1,6 +1,6 @@
 # 行动安全守护系统 — 摔倒检测与健康监护平台
 
-面向行动不便者（老年人、术后康复者、残障人士、慢性病患等）的智能监护 Web 平台。通过可穿戴设备采集运动数据，利用深度学习模型实时检测摔倒事件，结合 Web 管理后台为亲属/监护人提供远程监护能力。
+面向行动不便者（老年人、术后康复者、残障人士等）的智能监护平台。通过可穿戴设备采集运动数据，利用深度学习模型实时检测摔倒事件，提供 **网页管理后台** 和 **Android 移动端 App**，为亲属/监护人提供远程监护能力。
 
 > 硬件平台：Infineon PSoC E84 Edgi-Talk 开发板 + BMI160 IMU 传感器
 
@@ -8,498 +8,567 @@
 
 ## 目录
 
-- [技术栈](#技术栈)
 - [系统架构](#系统架构)
+- [技术栈](#技术栈)
+- [项目结构](#项目结构)
 - [数据库设计](#数据库设计)
 - [已实现功能](#已实现功能)
-  - [用户认证系统](#1-用户认证系统)
-  - [数据看板](#2-数据看板)
-  - [报警记录管理](#3-报警记录管理)
-  - [设备管理](#4-设备管理)
-  - [监护人系统](#5-监护人系统)
 - [API 接口文档](#api-接口文档)
-- [项目结构](#项目结构)
-- [快速开始](#快速开始)
-- [部署方式](#部署方式)
-- [未实现 / 规划中的功能](#未实现--规划中的功能)
-  - [嵌入式端对接](#一嵌入式端对接---psoc-e84-edgi-talk)
-  - [摔倒检测与报警闭环](#二摔倒检测与报警闭环)
-  - [久坐久站提醒](#三久坐久站提醒)
-  - [语音消息](#四语音消息)
-  - [移动端 App](#五移动端-app-flutter)
-  - [系统增强功能](#六系统增强功能)
+- [快速开始 — 网页端](#快速开始--网页端)
+- [快速开始 — 移动端](#快速开始--移动端)
+- [公网访问（固定域名）](#公网访问固定域名)
+- [设备模拟器](#设备模拟器)
+- [后续规划](#后续规划)
 - [UI/UX 设计规范](#uiux-设计规范)
-
----
-
-## 技术栈
-
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| 前端框架 | React + TypeScript | 19.x / 6.x |
-| 构建工具 | Vite | 8.x |
-| UI 组件库 | Ant Design | 6.x |
-| 图表库 | ECharts (echarts-for-react) | 6.x |
-| 路由 | React Router (HashRouter) | 7.x |
-| 后端框架 | Express | 5.x |
-| 数据库 | SQLite (better-sqlite3) | — |
-| 认证 | JWT (jsonwebtoken) | — |
-| 密码哈希 | PBKDF2-SHA512 (Node.js crypto) | — |
-| AI 推理引擎 | TFLite Micro / Ethos-U55 NPU | 嵌入式端 |
-| 实时操作系统 | RT-Thread | 嵌入式端 |
-| 图形库 | LVGL | 嵌入式端 MIPI-DSI 屏幕 |
 
 ---
 
 ## 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│              浏览器 (Web 管理后台)                             │
-│     React 19 · Ant Design 6 · ECharts 6 · HashRouter        │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTP / WebSocket (规划中)
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│           Express 5 后端 (server/index.cjs)                   │
-│                                                             │
-│  ┌──────────────────┐  ┌──────────────────┐                 │
-│  │ REST API 路由     │  │ 静态文件托管       │                 │
-│  │ /api/auth/*      │  │ dist/ → index.html │                │
-│  │ /api/guardians   │  │ (SPA 回退)        │                 │
-│  └────────┬─────────┘  └──────────────────┘                 │
-│           │                                                  │
-│  ┌────────┴─────────────────────────────────────────┐       │
-│  │              SQLite 数据库 (data.db)               │       │
-│  │  users · password_resets · guardianships          │       │
-│  └──────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────┘
-                       ▲
-                       │ Wi-Fi 6 / BLE 5.2 (规划中)
-┌─────────────────────────────────────────────────────────────┐
-│         嵌入式端 (PSoC E84 Edgi-Talk — 规划中)               │
-│                                                             │
-│  BMI160 IMU → AI 推理 (M55 + NPU) → 报警 → BLE/Wi-Fi → 云端  │
-│  ES8388 音频 Codec · MIPI-DSI 800×480 触摸屏 · TF 卡存储     │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│              网页端 (Web 管理后台)                              │
+│     React 19 · Ant Design 6 · ECharts · HashRouter            │
+│     端口: 5174 (dev) / 3001 (生产)                             │
+└────────────────────────┬─────────────────────────────────────┘
+                         │ HTTP / WebSocket (socket.io)
+┌────────────────────────┼─────────────────────────────────────┐
+│              移动端 (Android APK)                              │
+│     React 19 · Capacitor 8 · antd-mobile · PWA                │
+│     底部 Tab 导航 · Service Worker 离线缓存                     │
+└────────────────────────┬─────────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│              Express 5 后端 (server/index.cjs)                 │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ REST API                                            │    │
+│  │ /api/auth/*    认证（注册/登录/验证码/密码重置）         │    │
+│  │ /api/dashboard/* 数据看板（概览/24h/7d）               │    │
+│  │ /api/device/*  设备数据上报 + 状态查询                  │    │
+│  │ /api/alerts/*  告警列表 + 状态管理                     │    │
+│  │ /api/messages/* 用户消息（联系人/对话/发送）             │    │
+│  │ /api/guardians 监护人管理                             │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │ Socket.io WebSocket                                 │    │
+│  │ 实时推送: 设备数据 · 告警通知 · 用户消息               │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │ 静态文件托管 (dist/ → SPA 回退)                       │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │           SQLite 数据库 (server/data.db)               │   │
+│  │  users · password_resets · guardianships               │   │
+│  │  verification_codes · device_data · alerts · messages  │   │
+│  └──────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────┘
+                         ▲
+                         │ Wi-Fi / BLE（嵌入式端对接预留）
+┌──────────────────────────────────────────────────────────────┐
+│         嵌入式端 (PSoC E84 Edgi-Talk — 规划中)                 │
+│                                                              │
+│  BMI160 IMU → TFLite 推理 (M55 + NPU) → 报警 → BLE/Wi-Fi → 后端 │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 数据库设计
+## 技术栈
 
-### users 表
+| 层级 | 网页端 | 移动端 |
+|------|--------|--------|
+| 框架 | React 19 + TypeScript | React 19 + TypeScript |
+| 构建 | Vite 8 | Vite 8 |
+| UI | Ant Design 6 | antd-mobile 5 + Ant Design 6 |
+| 图表 | ECharts 6 | ECharts 6 |
+| 路由 | React Router 7 (HashRouter) | React Router 7 (HashRouter) |
+| 原生壳 | — | Capacitor 8 (Android) |
+| 离线 | — | Service Worker (PWA) |
 
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER PK | 自增主键 |
-| username | TEXT UNIQUE | 用户名 |
-| email | TEXT UNIQUE | 邮箱 |
-| password_hash | TEXT | PBKDF2-SHA512 哈希 |
-| salt | TEXT | 随机盐值 (16 bytes) |
-| role | TEXT | 'admin' 管理员 / 'family' 家属 |
-| created_at | TEXT | 创建时间 |
-| updated_at | TEXT | 更新时间 |
-
-### password_resets 表
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER PK | 自增主键 |
-| user_id | INTEGER FK | 关联 users.id |
-| token | TEXT UNIQUE | 重置 Token (32 bytes hex) |
-| expires_at | TEXT | 过期时间 (1 小时有效) |
-| used | INTEGER | 是否已使用 (0/1) |
-
-### guardianships 表
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER PK | 自增主键 |
-| ward_id | INTEGER FK | 被监护人 ID (关联 users.id) |
-| guardian_id | INTEGER FK | 监护人 ID (关联 users.id) |
-| created_at | TEXT | 建立时间 |
-| UNIQUE(ward_id, guardian_id) | — | 防止重复绑定 |
-
----
-
-## 已实现功能
-
-### 1. 用户认证系统
-
-完整的注册、登录、鉴权、密码重置流程。
-
-**密码安全模型：**
-
-```
-用户密码 → PBKDF2-SHA512 (随机盐, 10000 次迭代, 64 字节输出) → password_hash
-```
-
-每次注册/改密生成新的 16 字节随机盐，哈希结果存为 hex 字符串。验证时用相同盐值重新计算哈希比对。
-
-**JWT Token 机制：**
-
-- 签发算法：HMAC-SHA256
-- 有效期：7 天
-- 载荷：{ id, username, email, role }
-- 存储：浏览器 localStorage
-
-**前端安全措施：**
-
-- AuthContext 全局状态管理登录状态
-- ProtectedRoute 组件拦截未登录访问，自动跳转登录页
-- 登录/注册页采用独立布局（无侧边栏），未登录用户无法访问内部页面
-- Token 过期后 API 返回 401，前端清除本地状态并跳转登录页
-- 应用启动时验证 Token 有效性（调用 GET /api/auth/me），无效则清除
-
-**角色权限：**
-
-| 角色 | 权限 |
+| 层级 | 技术 |
 |------|------|
-| admin (管理员) | 全部页面访问，页面顶部显示金色"管理员"标签 |
-| family (家属) | 数据看板、报警记录、设备管理、监护人管理 |
-
-**密码重置流程：**
-
-1. 用户输入注册邮箱
-2. 后端生成 32 字节随机 Token，存入 password_resets 表（1 小时有效）
-3. 开发模式下 Token 直接返回前端显示（生产环境应通过邮件发送）
-4. 用户输入 Token + 新密码完成重置
-
-**默认账户：**
-
-| 用户名 | 密码 | 角色 |
-|--------|------|------|
-| admin | admin123 | 管理员 |
-
-首次启动时自动创建。数据库文件为 `server/data.db`，删除后重新启动即可重置。
-
----
-
-### 2. 数据看板
-
-**KPI 卡片（6 个）：**
-
-- 今日步数、行走时长、站立/静坐时长
-- 摔倒事件（有事件时卡片边框变红）
-- 久坐提醒、设备电量
-
-**图表：**
-
-- 今日活动分布：24 小时步数柱状图 + 站立时长折线 + 行走时长折线
-- 近 7 天趋势：每日步数渐变柱状图 + 久坐次数折线（双 Y 轴）
-
-**最近报警：**展示最近 5 条，包含时间、类型标签、状态、备注。
-
-**数据来源：**当前使用 Mock 数据（`src/mock/data.ts`），提供 24 小时活动分布、7 天趋势样本、报警记录。对接嵌入式端后全部替换为 API 调用。
-
----
-
-### 3. 报警记录管理
-
-- 列表：编号、类型（摔倒红色/久坐橙色）、时间（默认降序）、状态、置信度/时长、备注
-- 筛选：按类型 + 按状态 + 日期范围
-- 分页：每页 10 条，可切换
-- 详情弹窗：完整报警信息 + 处理备注 + 操作按钮
-- 状态流转：未处理 → 处理中 → 已处理 / 误报
-
----
-
-### 4. 设备管理
-
-**状态监控：**设备编号、名称、在线状态指示灯、当前活动 Tag、电量进度条、固件版本、最后心跳时间。
-
-**连接信息卡片：**Wi-Fi 6（SSID + 信号强度）、蓝牙 5.2 备用说明、语音消息开关。
-
-**参数配置：**
-
-| 参数 | 默认值 | 范围 |
-|------|--------|------|
-| 久坐/久站提醒间隔 | 30 分钟 | 15/30/45/60 |
-| 检测模式 | 久坐+久站 | 仅久坐/仅久站/两者 |
-| 摔倒检测灵敏度 | 标准 | 标准/高灵敏 |
-| 报警音量 | 80% | 0-100% |
-
-**嵌入式对接预留区：**黄色虚线框，标注 MQTT Broker、设备绑定、OTA 固件升级待接入。
-
----
-
-### 5. 监护人系统
-
-**关系模型：**多对多关系，一个用户可有多个监护人，一个监护人可监护多人。ward_id + guardian_id 唯一约束防止重复。
-
-**API：**
-
-- GET `/api/guardians` — 返回我的监护人列表 + 我监护的人列表
-- POST `/api/guardians` — 通过用户名添加监护人
-- DELETE `/api/guardians/:id` — 移除监护人
-
-**业务规则：**不能将自己设为监护人、不能重复添加。
-
-**前端页面：**左侧「我的监护人」表格（可移除）、右侧「我监护的人」表格、添加弹窗搜索用户名。功能预告卡片说明后续通知机制。
-
-**技术预留：**`Guardianship.guardianIdsOf(wardId)` 返回监护人 ID 数组，后续摔倒/久坐/语音消息直接调用此方法获取通知目标。
-
----
-
-## API 接口文档
-
-### 认证 API — `/api/auth`
-
-| 方法 | 路径 | 鉴权 | 入参 | 出参 |
-|------|------|------|------|------|
-| POST | `/api/auth/register` | 否 | { username, email, password } | { token, user } |
-| POST | `/api/auth/login` | 否 | { username, password } | { token, user } |
-| GET | `/api/auth/me` | Bearer | — | { user } |
-| POST | `/api/auth/forgot-password` | 否 | { email } | { message, devToken } |
-| POST | `/api/auth/reset-password` | 否 | { token, newPassword } | { message } |
-
-### 监护人 API — `/api/guardians`
-
-| 方法 | 路径 | 鉴权 | 入参 | 出参 |
-|------|------|------|------|------|
-| GET | `/api/guardians` | Bearer | — | { guardians, wards } |
-| POST | `/api/guardians` | Bearer | { username } | { guardian } |
-| DELETE | `/api/guardians/:id` | Bearer | — | { message } |
-
-### 系统 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 → { ok, time } |
-
-### 错误格式
-
-```json
-{ "error": "错误描述" }
-```
-
-HTTP 状态码：400 参数错误、401 未登录、403 权限不足、404 不存在、409 冲突。
+| 后端框架 | Express 5 |
+| 数据库 | SQLite (better-sqlite3, WAL 模式) |
+| 认证 | JWT (HMAC-SHA256, 7 天) + PBKDF2-SHA512 |
+| 实时通信 | Socket.io (WebSocket) |
+| 邮件 | Resend API → QQ SMTP → Mock 三级降级 |
+| 短信 | 阿里云短信 SDK → Mock 降级 |
+| 频率限制 | express-rate-limit |
 
 ---
 
 ## 项目结构
 
 ```
-web/
-├── index.html                     # HTML 入口
-├── package.json                   # 依赖 + 脚本 (dev/build/server/start)
-├── vite.config.ts                 # Vite 构建 (代码分割 + API 代理 + 隧道白名单)
+web/                                  # 项目根目录
 │
-├── server/                        # Express 后端
-│   ├── index.cjs                  # 入口 (API + 静态文件 + SPA 回退)
-│   ├── database.cjs               # SQLite 初始化 + 3 个数据模型
-│   ├── data.db                    # SQLite 数据库文件 (自动生成)
-│   ├── middleware/auth.cjs        # JWT 签发 + 鉴权中间件
-│   └── routes/auth.cjs            # 认证路由 (注册/登录/找回密码)
+├── README.md                         # 本文件
+├── 快速启动教程.md                     # 零基础快速上手指南
 │
-├── src/                           # React 前端
-│   ├── App.tsx                    # 根: 路由 + 主题 + AuthProvider
-│   ├── theme/index.ts             # Ant Design 主题 (暖珊瑚+青绿)
-│   ├── context/AuthContext.tsx    # 全局认证状态
-│   ├── api/index.ts               # API 层 (Mock, 预留 fetch 切换)
-│   ├── mock/data.ts               # Mock 数据源
-│   ├── components/
-│   │   ├── Layout/index.tsx       # 主布局 (深色侧边栏+顶栏+用户菜单)
-│   │   └── ProtectedRoute/       # 路由保护
-│   └── pages/
-│       ├── Login/index.tsx        # 登录
-│       ├── Register/index.tsx     # 注册
-│       ├── ForgotPassword/        # 找回密码 (3 步)
-│       ├── Dashboard/index.tsx    # 数据看板
-│       ├── Alerts/index.tsx       # 报警记录
-│       ├── Device/index.tsx       # 设备管理
-│       └── Guardians/index.tsx    # 监护人管理
+├── web/                              # 网页端 + 后端
+│   ├── package.json                  # 依赖 + 脚本
+│   ├── vite.config.ts                # Vite 配置
+│   ├── index.html                    # HTML 入口
+│   │
+│   ├── server/                       # Express 后端
+│   │   ├── index.cjs                 # 入口（API + WebSocket + 静态文件）
+│   │   ├── database.cjs              # SQLite 初始化 + 8 个数据模型
+│   │   ├── data.db                   # 数据库文件（自动生成）
+│   │   ├── migrations.cjs            # 数据库迁移系统（4 个迁移）
+│   │   ├── simulator.cjs             # 设备数据模拟器
+│   │   ├── seed.cjs                  # 演示种子数据脚本
+│   │   ├── middleware/
+│   │   │   ├── auth.cjs              # JWT 签发 + 鉴权中间件
+│   │   │   └── rateLimit.cjs         # 频率限制
+│   │   ├── routes/
+│   │   │   ├── auth.cjs              # 认证路由
+│   │   │   ├── dashboard.cjs         # 看板数据路由
+│   │   │   ├── device.cjs            # 设备数据路由
+│   │   │   ├── alerts.cjs            # 告警路由
+│   │   │   ├── guardians.cjs         # 监护人路由（申请/同意/拒绝）
+│   │   │   └── messages.cjs          # 消息路由
+│   │   └── services/
+│   │       ├── email.cjs             # 邮件发送
+│   │       └── sms.cjs               # 短信发送
+│   │
+│   ├── src/                          # React 前端
+│   │   ├── App.tsx                   # 路由 + 主题 + AuthProvider
+│   │   ├── theme/index.ts            # 主题配色
+│   │   ├── context/AuthContext.tsx   # 全局认证状态
+│   │   ├── hooks/useMediaQuery.ts    # 响应式 Hook
+│   │   ├── hooks/useSocket.ts        # WebSocket 连接 Hook
+│   │   ├── api/index.ts              # API 层（真实请求 + Mock 兜底）
+│   │   ├── mock/data.ts              # Mock 数据
+│   │   ├── components/
+│   │   │   ├── Layout/index.tsx      # 桌面侧边栏 / 移动端抽屉
+│   │   │   └── ProtectedRoute/       # 路由守卫
+│   │   └── pages/
+│   │       ├── Login/                # 登录（3 种方式）
+│   │       ├── Register/             # 注册（邮箱验证码）
+│   │       ├── ForgotPassword/       # 找回密码
+│   │       ├── Dashboard/            # 数据看板
+│   │       ├── Alerts/               # 报警记录
+│   │       ├── Device/               # 设备管理
+│   │       └── Guardians/            # 监护人管理（搜索+申请+列表）
+│   │       └── Messages/             # 在线实时聊天
+│   │
+│   ├── dist/                         # 构建产物
 │
-├── dist/                          # 构建产物
-├── start-tunnel.bat               # 一键启动隧道
-├── oss-deploy.cjs                 # OSS 上传脚本
-└── DEPLOY.md                      # 部署详细说明
+├── app/                              # 移动端 Android App
+│   ├── package.json                  # 移动端依赖
+│   ├── vite.config.ts                # Vite 配置
+│   ├── capacitor.config.ts           # Capacitor 配置
+│   │
+│   ├── src/
+│   │   ├── App.tsx                   # 路由 + 底部 Tab 布局
+│   │   ├── hooks/
+│   │   │   ├── useMediaQuery.ts      # 响应式 Hook
+│   │   │   └── useNetworkStatus.ts   # 网络状态检测
+│   │   ├── api/index.ts              # API 层（可配置后端地址）
+│   │   ├── components/
+│   │   │   └── MobileLayout/         # 底部 Tab 导航栏
+│   │   └── pages/                    # 与网页端页面一一对应
+│   │
+│   ├── public/
+│   │   ├── manifest.json             # PWA 清单
+│   │   ├── sw.js                     # Service Worker
+│   │   └── icons/                    # PWA 图标
+│   │
+│   ├── dist/                         # Web 构建产物（被打包进 APK）
+│   └── android/                      # Capacitor Android 项目
+│       ├── build.gradle
+│       ├── settings.gradle
+│       ├── init.gradle               # 国内镜像 + Java 17 兼容配置
+│       └── app/
+│           ├── build.gradle
+│           └── build/outputs/apk/debug/app-debug.apk
+│
+├── models/                           # 训练好的 ML 模型
+│   └── tflite_export/
+│       ├── fall_detection_float32.tflite    # 1.02MB
+│       └── fall_detection_int8.tflite       # 319KB（嵌入式端用）
+│
+├── data/                             # 训练数据
+└── outputs/                          # 模型评估结果
 ```
 
 ---
 
-## 快速开始
+## 数据库设计
+
+### users
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| username | TEXT UNIQUE | 用户名 |
+| email | TEXT UNIQUE | 邮箱 |
+| phone | TEXT UNIQUE | 手机号（可选） |
+| email_verified | INTEGER | 邮箱已验证 0/1 |
+| phone_verified | INTEGER | 手机号已验证 0/1 |
+| password_hash | TEXT | PBKDF2-SHA512 哈希 |
+| salt | TEXT | 随机盐值 |
+| role | TEXT | admin / family |
+
+### device_data
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| device_id | TEXT | 设备标识 |
+| user_id | INTEGER FK | 所属用户 |
+| accel_x/y/z | REAL | 加速度计数据 |
+| gyro_x/y/z | REAL | 陀螺仪数据 |
+| fall_detected | INTEGER | 是否检测到跌倒 |
+| steps | INTEGER | 累计步数 |
+| battery | INTEGER | 电量百分比 |
+| activity | TEXT | standing / walking / fall |
+| created_at | TEXT | 上报时间 |
+
+### alerts
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | 告警编号（ALT-时间戳-随机码） |
+| device_id | TEXT | 设备标识 |
+| user_id | INTEGER FK | 所属用户 |
+| type | TEXT | fall / sedentary |
+| status | TEXT | unhandled / processing / handled / false_alarm |
+| confidence | REAL | 置信度 |
+| duration | INTEGER | 持续时长（久坐告警） |
+| location | TEXT | 位置描述 |
+| handler_note | TEXT | 处理备注 |
+
+### messages
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| from_user_id | INTEGER FK | 发送者 |
+| to_user_id | INTEGER FK | 接收者 |
+| content | TEXT | 消息内容 |
+| read | INTEGER | 已读 0/1 |
+| created_at | TEXT | 发送时间 |
+
+### guardian_requests
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| from_user_id | INTEGER FK | 申请发起者 |
+| to_user_id | INTEGER FK | 申请接收者 |
+| status | TEXT | pending / accepted / rejected |
+| created_at | TEXT | 申请时间 |
+| updated_at | TEXT | 处理时间 |
+| UNIQUE(from_user_id, to_user_id) | — | 防止重复申请 |
+
+---
+
+## 已实现功能
+
+### 用户认证
+- 3 种登录方式：用户名+密码 / 手机号+密码 / 手机号+短信验证码
+- 注册需邮箱验证码，可选填手机号
+- 忘记密码走邮箱验证码重置
+- JWT 鉴权 + PBKDF2-SHA512 密码哈希
+- 角色权限（admin / family）
+- API 频率限制（防暴力破解 + 防批量注册）
+
+### 数据看板（Dashboard）
+- 6 个 KPI 卡片（步数/行走时长/站立时长/跌倒事件/久坐提醒/电量）
+- 24 小时活动分布柱状折线图
+- 7 天趋势图（双 Y 轴）
+- 跌倒事件时卡片边框变红
+- **数据源**：优先走 `/api/dashboard/*` 真实 API，后端未启动时自动回退 Mock
+
+### 报警管理
+- 告警列表 + 类型/状态筛选
+- 详情弹窗 + 状态流转（未处理→处理中→已处理/误报）
+- **跌倒检测自动生成告警**：设备上报 `fall_detected: true` → 后端自动写入 alerts 表
+
+### 设备管理
+- 设备状态监控（在线/离线/电量/当前活动）
+- 参数配置（久坐间隔/检测模式/灵敏度/音量）
+- 设备数据上报接口 `POST /api/device/data`
+
+### 监护人对偶系统
+- **申请制**：搜索用户名 → 发送申请 → 对方同意/拒绝 → 自动建立监护关系
+- 多对多关系，可移除监护人
+- 不能自监护 + 防重复 + 防重复申请
+- WebSocket 实时推送申请通知（对方立刻收到红点提醒）
+- 申请同意后双方自动互为联系人，可开始聊天
+
+### 用户消息（类似微信/QQ 的在线聊天）
+- **联系人来源**：监护关系自动成为联系人 + 有消息记录的用户
+- 一对一实时聊天：REST API 写入 + WebSocket 实时推送到对方
+- 聊天页面：网页端分栏布局（左联系人右聊天窗），移动端全屏切换
+- 未读消息计数：侧边栏/顶栏红点角标，新消息实时更新
+
+### 设备模拟器
+- `node server/simulator.cjs` 模拟设备持续上报
+- 自动生成步数、电量、活动状态，周期性触发跌倒
+
+### WebSocket 实时推送
+- 设备数据 → 后端 → WebSocket → 前端实时更新
+- 用户消息实时送达
+
+### 移动端 App
+- Android APK 打包成功（`app-debug.apk` 4.8MB）
+- 底部 Tab 导航（看板/告警/设备/守护）
+- 网络状态检测 + Service Worker 离线缓存
+- 后端地址可配置
+
+---
+
+## API 接口文档
+
+### 认证 — `/api/auth`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| POST | `/api/auth/register` | — | 注册（需邮箱验证码） |
+| POST | `/api/auth/login` | — | 用户名/手机号+密码登录 |
+| POST | `/api/auth/login-by-sms` | — | 短信验证码登录 |
+| GET | `/api/auth/me` | Bearer | 获取当前用户信息 |
+| POST | `/api/auth/send-email-code` | — | 发送邮箱验证码 |
+| POST | `/api/auth/send-sms-code` | — | 发送短信验证码 |
+| POST | `/api/auth/verify-code` | — | 通用验证码校验 |
+| POST | `/api/auth/forgot-password` | — | 发送密码重置验证码 |
+| POST | `/api/auth/reset-password` | — | 使用验证码重置密码 |
+
+### 数据看板 — `/api/dashboard`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/api/dashboard/overview` | Bearer | 今日概览 KPI |
+| GET | `/api/dashboard/hourly` | Bearer | 24 小时活动分布 |
+| GET | `/api/dashboard/weekly` | Bearer | 7 天趋势 |
+
+### 设备数据 — `/api/device`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| POST | `/api/device/data` | Bearer | 上报设备数据（跌倒自动生成告警） |
+| GET | `/api/device/status` | Bearer | 查询设备状态 |
+| GET | `/api/device/config` | Bearer | 获取设备配置 |
+
+### 告警 — `/api/alerts`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/api/alerts` | Bearer | 告警列表（支持 type/status 筛选） |
+| PUT | `/api/alerts/:id` | Bearer | 更新告警状态 + 备注 |
+
+### 消息 — `/api/messages`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/api/messages/contacts` | Bearer | 最近联系人 |
+| GET | `/api/messages/:userId` | Bearer | 与某用户对话记录 |
+| POST | `/api/messages` | Bearer | 发送消息 |
+| GET | `/api/messages/unread/count` | Bearer | 未读消息数 |
+
+### 监护人 — `/api/guardians`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/api/guardians` | Bearer | 我的监护人 + 我监护的人 |
+| GET | `/api/guardians/requests` | Bearer | 收到的 + 发出的申请列表 |
+| POST | `/api/guardians/request` | Bearer | 发送监护人申请（通过用户名） |
+| PUT | `/api/guardians/request/:id/accept` | Bearer | 同意申请 |
+| PUT | `/api/guardians/request/:id/reject` | Bearer | 拒绝申请 |
+| DELETE | `/api/guardians/:id` | Bearer | 移除监护人 |
+| GET | `/api/guardians/notifications` | Bearer | 未读通知数（申请 + 消息） |
+
+### 系统
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/health` | 健康检查 |
+
+### 设备数据上报格式
+
+```json
+{
+  "device_id": "EDGI-001",
+  "accel": { "x": 0.1, "y": -0.2, "z": 9.8 },
+  "gyro": { "x": 0.01, "y": 0.02, "z": 0 },
+  "fall_detected": false,
+  "steps": 120,
+  "battery": 85,
+  "activity": "walking"
+}
+```
+
+---
+
+## 快速开始 — 网页端
 
 ### 前置条件
-
 - Node.js >= 18
-- Windows 10/11（自带 SSH）
 
-### 开发模式
+### 安装并启动
 
 ```bash
-cd web && npm install
+cd web/web
+npm install
+npm run build
+npm run server
+```
 
+浏览器打开 `http://localhost:3001`，用 `admin / admin123` 登录。
+
+### 默认账户
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| admin | admin123 | 管理员 |
+| zhangsan | demo123 | 家属 |
+| lihua | demo123 | 家属 |
+| laowang | demo123 | 被监护人 |
+
+> 首次启动自动创建 admin 账户。其他演示账户需手动注册。
+
+### 开发模式（前端热更新）
+
+```bash
 # 终端 1：后端
-npm run server              # 端口 3001
+npm run server
 
-# 终端 2：前端 (含 API 代理)
-npm run dev                 # 端口 5173 → proxy /api → 3001
-```
-
-### 生产模式
-
-```bash
-npm run build               # 构建前端
-npm run server              # 端口 3001，API + 静态文件统一端口
-```
-
-访问 `http://localhost:3001`。
-
-### 一键公网访问
-
-```bash
-start-tunnel.bat            # 自动构建 → 启动服务 → SSH 隧道
+# 终端 2：前端（Vite HMR，端口 5174）
+npm run dev
 ```
 
 ---
 
-## 部署方式
+## 快速开始 — 移动端
 
-### 方式 1：VPS + Nginx (推荐生产)
+### 前置条件
+- Java 17（Zulu JDK）
+- Android SDK（Build Tools 36.1.0+，Platform android-36）
+
+### 构建 APK
 
 ```bash
+cd app
+npm install
 npm run build
-scp -r dist/* root@<服务器IP>:/var/www/html/
-# Nginx 配置见 DEPLOY.md
+
+cd android
+./gradlew assembleDebug --init-script init.gradle
 ```
 
-### 方式 2：阿里云 OSS 静态托管
+APK 生成在 `app/android/app/build/outputs/apk/debug/app-debug.apk`。
+
+### 安装到手机
+
+1. 将 APK 传到手机，点击安装
+2. 进入 App 后，在设置页填入后端地址
+3. 后端地址为电脑局域网 IP + 端口，如 `http://192.168.1.165:3001`
+
+### 修改后端地址
+
+在 `app/src/api/index.ts` 顶部修改 `SERVER_URL` 默认值：
+
+```ts
+const SERVER_URL = localStorage.getItem('server_url') || 'http://你的IP:3001';
+```
+
+---
+
+## 公网访问（固定域名）
+
+使用 Serveo SSH 隧道，将本地后端暴露到公网固定域名。
+
+### 一次性配置
+
+1. 生成 SSH 密钥：`ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_serveo -N ""`
+2. 注册 [Serveo](https://console.serveo.net) → SSH Keys → 添加公钥
+3. Domains → Add Domain → 预约子域名（如 `mobility-guardian`）
+
+### 每次启动
 
 ```bash
+# 窗口 1：后端
+cd web/web
 npm run build
-node oss-deploy.cjs upload
-```
-需在 OSS 控制台关闭「强制下载」。详见 `DEPLOY.md`。
+npm run server
 
-### 方式 3：Serveo SSH 隧道 (测试)
+# 窗口 2：公网隧道
+ssh -i ~/.ssh/id_rsa_serveo -R mobility-guardian:80:localhost:3001 serveo.net
+```
+
+访问 `https://mobility-guardian.serveousercontent.com`（换成你预约的子域名）。
+
+---
+
+## 设备模拟器
+
+在拿到真实嵌入式设备之前，用模拟器脚本产生测试数据：
 
 ```bash
-npm run build && node server/index.cjs &
-ssh -R 80:localhost:3001 serveo.net
+cd web/web
+node server/simulator.cjs
 ```
 
----
-
-## 未实现 / 规划中的功能
-
----
-
-### 一、嵌入式端对接 — PSoC E84 Edgi-Talk
-
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| BMI160 IMU 数据采集 | 极高 | SPI 接口，6 轴数据，104Hz 采样 |
-| AI 模型推理 | 极高 | InceptionTime (INT8 319KB)，M55 + Ethos-U55 NPU |
-| Wi-Fi 6 联网 (CYW55512) | 极高 | lwIP 协议栈，MQTT 上报设备事件 |
-| BLE 5.2 备用通信 | 高 | CYW55512 HCI UART，Wi-Fi 断开时自动切换 |
-| RT-Thread 系统移植 | 极高 | RT-Thread Studio + GCC Arm Embedded |
-| LVGL 屏幕 UI | 高 | MIPI-DSI 800×480 触摸屏 |
+模拟器会：
+- 每 2 秒上报一次设备数据
+- 交替切换 standing / walking 状态
+- 约每 100 秒触发一次跌倒（自动生成告警）
+- 自动用 admin 账户登录
 
 ---
 
-### 二、摔倒检测与报警闭环
+## 种子数据
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 本地声光报警 | 极高 | 蜂鸣器 PWM + LED SOS 闪烁 + 屏幕 SOS |
-| 误报取消 | 极高 | 10 秒内按键取消，标记误报 |
-| 远程通知监护人 | 极高 | Wi-Fi MQTT → 云端 → 推送 → 监护人 |
-| 双路径冗余 | 高 | Wi-Fi 优先，蓝牙经手机 App 中转 |
-| 振动马达触觉反馈 | 中 | GPIO + MOSFET 驱动 |
+一键生成演示账户、历史数据和示例消息：
 
-**技术要点：**
+```bash
+cd web/web
+node server/seed.cjs
+```
 
-- 确认窗口：连续 2 次推理均为 "fall" 才报警
-- 陀螺仪角速度辅助区分摔倒与快速坐下
-- BMI160 硬件 any-motion 中断 (< 10ms 响应，无需 CPU)
-- 滑动窗口推理：每 0.5s 推理一次，延迟从 5s 降至 ~2.5s
-
-**Web 端待做：**新增 API 接收设备上报摔倒事件，存入数据库，通过 WebSocket 推送通知给在线监护人。
+生成内容包括：
+- **演示账户**：zhangsan / lihua / laowang（密码均为 `demo123`）
+- **监护人关系**：zhangsan + lihua 共同监护 laowang
+- **7 天历史数据**：720 条设备数据，累计 18,381 步
+- **15 条历史告警**：含跌倒 + 久坐，含误报
+- **5 条示例消息**：zhangsan ↔ laowang、lihua ↔ laowang
 
 ---
 
-### 三、久坐/久站提醒
+## 在线聊天 — 完整流程
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 姿态累计计时 | 高 | AI 输出 "standing" 期间计数器累计 |
-| 用户可设阈值 | 高 | 15/30/45/60 分钟，Web 端配置同步 |
-| 本地温和提醒 | 高 | 蓝色 LED + 短促提示音（区别于摔倒） |
-| 远程通知监护人 | 高 | 云端推送久坐提醒 |
+系统实现了类似微信/QQ 的好友申请 + 实时聊天体系：
 
-**技术要点：**
+```
+A 注册登录 → 搜索 B 的用户名 → 发送监护人申请
+  → B 收到 WebSocket 实时推送（右上角红点+1）
+  → B 点进「监护人管理」→「收到的申请」→ 点「同意」
+  → A 收到 WebSocket 推送「申请已通过」
+  → 双方联系人列表出现对方
+  → 双方点击进入聊天 → 发消息 → 对方实时收到 ✅
+```
 
-- 纯逻辑判断，不需要新模型
-- 检测到 walk/step/fall 时计数器自动归零
-- 仅检测久坐和久站两种静止状态
-
-**Web 端待做：**设备页配置滑块已就绪，需实现配置下发 API。
+聊天消息同时写入数据库 + 通过 Socket.io 实时推送到对方客户端。无论网页端还是移动端，都能实时收发。
 
 ---
 
-### 四、语音消息
+## 后续规划
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 录音/播放 | 高 | ES8388 ADC/DAC，I2S 接口，16kHz/16bit |
-| ADPCM 编解码 | 高 | 16kHz → 32kbps，30 秒约 120KB |
-| TF 卡存储 | 中 | SDIO + FatFs，循环缓冲 50 条 |
-| Wi-Fi 上传云端 | 高 | HTTPS 上传 OSS |
-| BLE 备用传输 | 中 | 2M PHY |
-| RT-Thread Audio 框架 | 高 | Audio Device Framework 驱动 ES8388 |
-
-**Web 端待做：**语音消息管理页面、上传/下载 API、消息已读状态。
-
----
-
-### 五、移动端 App (Flutter)
-
-| 功能 | 优先级 |
-|------|--------|
-| 账户 + 设备绑定 | 高 |
-| 实时监控 + 报警推送 | 极高 |
-| 语音消息 | 高 |
-| 设备设置 + 亲友管理 | 中 |
-
----
-
-### 六、系统增强功能
-
-**通信与后端：**
-
-- MQTT Broker (EMQX)：设备 ↔ 云端双向通信
-- WebSocket：实时推送报警给 Web 端
-- 邮件服务：找回密码 Token 通过真实邮件发送
-- MySQL 迁移：生产环境数据库升级
-- Redis 缓存：在线状态、消息队列
-
-**设备高级功能：**
-
-- 计步器：基于 walk/step 输出 + 加速度峰值检测
-- 睡眠监测：加速度幅值阈值判断清醒/浅睡/深睡
-- 智能电源管理：4 模式自动切换（活跃/待机/低功耗/休眠）
-- OTA 固件升级：BLE 接收新固件 → 双 Bank Flash
-- 设备自检：IMU/Flash/BLE/电池/蜂鸣器开机 5 项检查
-- 本地数据记录：TF 卡 JSON 活动日志
-- CapSense 触控：PSoC 6 原生触摸
-- 姿态唤醒：抬腕自动亮屏
-
-**Web 端扩展：**
-
-- 语音消息管理页面
-- 活动详情页面（按日/周/月）
-- 管理员面板（用户管理 + 系统统计）
-- 深色模式 / 主题切换
+| 方向 | 内容 |
+|------|------|
+| 嵌入式端对接 | BMI160 IMU → TFLite 推理 → MQTT/Wi-Fi → 后端 |
+| 推送通知 | FCM/APNs 推送（跌倒告警、久坐提醒） |
+| 语音消息 | 嵌入式端录音 → 上传 → 监护人播放 |
+| iOS App | Capacitor iOS 平台适配 |
+| 深色模式 | 主题切换 |
+| 管理面板 | 用户管理 + 系统统计 |
 
 ---
 
 ## UI/UX 设计规范
-
-基于 UI/UX Pro Max 方法论设计。
-
-**配色：**
 
 | 用途 | 色值 | 说明 |
 |------|------|------|
@@ -511,13 +580,10 @@ ssh -R 80:localhost:3001 serveo.net
 | 背景 | `#F5F0EC` | 暖灰 — 柔和 |
 | 边框 | `#E8E0D8` | 浅灰 |
 
-**排版：**基准字号 15px，标题 18-28px，触摸目标 ≥ 64×38px。
-
-**侧边栏：**深色渐变 `#3D322C → #5C4A3E`，折叠支持。
-
-**卡片：**圆角 10px，悬停阴影，KPI 彩色数值。
-
-**响应式：**xs/sm/md/lg 四级栅格，手机/平板/桌面适配。
+- **响应式断点**：768px（桌面/移动）
+- **触摸目标**：≥ 36px
+- **卡片圆角**：10px
+- **侧边栏**：深色渐变 `#3D322C → #5C4A3E`
 
 ---
 

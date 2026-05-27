@@ -16,9 +16,11 @@ import {
   fetchDashboardOverview,
   fetchHourlyActivity,
   fetchWeeklyTrend,
+  fetchAlerts,
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
-import { mockAlerts } from '../../mock/data';
+import { useSocket } from '../../hooks/useSocket';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Title, Text } = Typography;
 
@@ -28,6 +30,7 @@ interface Overview {
   standDurationMin: number;
   fallEvents: number;
   sedentaryAlerts: number;
+  battery: number;
 }
 
 const alertColumns = [
@@ -75,22 +78,59 @@ export default function Dashboard() {
   const [recentAlerts, setRecentAlerts] = useState<AlertRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = antTheme.useToken();
+  const isMobile = useIsMobile();
+  const { connected, join, on } = useSocket();
+  const [chartKey, setChartKey] = useState(0);
+
+  const loadKpi = async () => {
+    const ov = await fetchDashboardOverview();
+    setOverview(ov);
+  };
+
+  const loadCharts = async () => {
+    const [hourly, weekly, alerts] = await Promise.all([
+      fetchHourlyActivity(),
+      fetchWeeklyTrend(),
+      fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 5) || []),
+    ]);
+    setHourlyData(hourly);
+    setWeeklyTrend(weekly);
+    setRecentAlerts(alerts);
+  };
+
+  const loadAll = async () => {
+    setLoading(true);
+    const [ov, hourly, weekly, alerts] = await Promise.all([
+      fetchDashboardOverview(),
+      fetchHourlyActivity(),
+      fetchWeeklyTrend(),
+      fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 5) || []),
+    ]);
+    setOverview(ov);
+    setHourlyData(hourly);
+    setWeeklyTrend(weekly);
+    setRecentAlerts(alerts);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  // WebSocket 实时刷新 KPI（轻量）
+  useEffect(() => {
+    const { user } = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user?.id) join(user.id);
+  }, [connected]);
 
   useEffect(() => {
-    const load = async () => {
-      const [ov, hourly, weekly] = await Promise.all([
-        fetchDashboardOverview(),
-        fetchHourlyActivity(),
-        fetchWeeklyTrend(),
-      ]);
-      setOverview(ov);
-      setHourlyData(hourly);
-      setWeeklyTrend(weekly);
-      setRecentAlerts(mockAlerts.slice(0, 5));
-      setLoading(false);
-    };
-    load();
-  }, []);
+    return on('device_update', () => { loadKpi(); });
+  }, [on]);
+
+  // 图表 30 秒刷新一次（重量）
+  useEffect(() => {
+    if (loading) return;
+    const timer = setInterval(() => { loadCharts(); setChartKey(k => k + 1); }, 30000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   if (loading) {
     return (
@@ -196,7 +236,7 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="今日步数"
@@ -207,7 +247,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="行走时长"
@@ -218,7 +258,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="站立/静坐时长"
@@ -229,7 +269,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable style={{ borderColor: overview?.fallEvents ? '#E05555' : undefined }}>
             <Statistic
               title="摔倒事件"
@@ -240,7 +280,7 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="久坐提醒"
@@ -251,11 +291,11 @@ export default function Dashboard() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={12} md={8} lg={4}>
+        <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
               title="设备电量"
-              value={72}
+              value={overview?.battery ?? '--'}
               suffix="%"
               prefix={<ThunderboltOutlined />}
               valueStyle={{ color: '#4DB6AC' }}
@@ -268,12 +308,12 @@ export default function Dashboard() {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={14}>
           <Card title="今日活动分布">
-            <ReactECharts option={hourlyChartOption} style={{ height: 320 }} />
+            <ReactECharts key={chartKey} option={hourlyChartOption} style={{ height: isMobile ? 260 : 320 }} />
           </Card>
         </Col>
         <Col xs={24} lg={10}>
           <Card title="近 7 天趋势">
-            <ReactECharts option={weeklyChartOption} style={{ height: 320 }} />
+            <ReactECharts key={chartKey + 100} option={weeklyChartOption} style={{ height: isMobile ? 260 : 320 }} />
           </Card>
         </Col>
       </Row>
@@ -296,6 +336,7 @@ export default function Dashboard() {
           rowKey="id"
           pagination={false}
           size="middle"
+          scroll={{ x: 600 }}
         />
       </Card>
     </div>

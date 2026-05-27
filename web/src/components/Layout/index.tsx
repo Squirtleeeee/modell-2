@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout as AntLayout, Menu, Badge, Avatar, Dropdown, Typography, Tag } from 'antd';
+import { Layout as AntLayout, Menu, Badge, Avatar, Dropdown, Typography, Tag, Button, Drawer } from 'antd';
+import { useSocket } from '../../hooks/useSocket';
 import {
   DashboardOutlined,
   AlertOutlined,
@@ -10,25 +11,51 @@ import {
   LogoutOutlined,
   BellOutlined,
   CrownOutlined,
+  MenuOutlined,
+  CloseOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Sider, Header, Content } = AntLayout;
 const { Text } = Typography;
-
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: '数据看板' },
-  { key: '/alerts', icon: <AlertOutlined />, label: '报警记录' },
-  { key: '/device', icon: <SettingOutlined />, label: '设备管理' },
-  { key: '/guardians', icon: <TeamOutlined />, label: '监护人管理' },
-];
 
 export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin } = useAuth();
+  const { join, on } = useSocket();
   const [collapsed, setCollapsed] = useState(false);
-  const [unreadAlerts] = useState(1);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [notifCount, setNotifCount] = useState(0);
+  const isMobile = useIsMobile();
+
+  // 实时通知计数
+  useEffect(() => {
+    if (user) join(user.id);
+  }, [user, join]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const fetchCount = () => {
+      fetch('/api/guardians/notifications/count', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json()).then(d => setNotifCount(d.total || 0)).catch(() => {});
+    };
+    fetchCount();
+    const unsub1 = on('new_request', fetchCount);
+    const unsub2 = on('new_message', fetchCount);
+    return () => { unsub1(); unsub2(); };
+  }, [on]);
+
+  const menuItems = [
+    { key: '/', icon: <DashboardOutlined />, label: '数据看板' },
+    { key: '/alerts', icon: <AlertOutlined />, label: '报警记录' },
+    { key: '/device', icon: <SettingOutlined />, label: '设备管理' },
+    { key: '/guardians', icon: <TeamOutlined />, label: (<>监护人管理 {notifCount > 0 && <Badge count={notifCount} size="small" offset={[6, 0]} />}</>) },
+    { key: '/messages', icon: <MessageOutlined />, label: '消息' },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -61,50 +88,97 @@ export default function AppLayout() {
     },
   };
 
+  const sidebarContent = (
+    <>
+      <div
+        style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <Text strong style={{ color: '#fff', fontSize: isMobile ? 16 : 18, letterSpacing: 1 }}>
+          行动安全守护系统
+        </Text>
+      </div>
+      <Menu
+        theme="dark"
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        items={menuItems}
+        onClick={({ key }) => { navigate(key); setDrawerOpen(false); }}
+        style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8 }}
+      />
+    </>
+  );
+
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        style={{
-          background: 'linear-gradient(180deg, #3D322C 0%, #5C4A3E 100%)',
-        }}
-        theme="dark"
-        width={220}
-      >
-        <div
+      {/* 桌面端侧边栏 */}
+      {!isMobile && (
+        <Sider
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
           style={{
-            height: 64,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            background: 'linear-gradient(180deg, #3D322C 0%, #5C4A3E 100%)',
           }}
-        >
-          {collapsed ? (
-            <BellOutlined style={{ fontSize: 24, color: '#E8725A' }} />
-          ) : (
-            <Text strong style={{ color: '#fff', fontSize: 18, letterSpacing: 1 }}>
-              行动安全守护系统
-            </Text>
-          )}
-        </div>
-        <Menu
           theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8 }}
-        />
-      </Sider>
+          width={220}
+        >
+          <div
+            style={{
+              height: 64,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {collapsed ? (
+              <BellOutlined style={{ fontSize: 24, color: '#E8725A' }} />
+            ) : (
+              <Text strong style={{ color: '#fff', fontSize: 18, letterSpacing: 1 }}>
+                行动安全守护系统
+              </Text>
+            )}
+          </div>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            items={menuItems}
+            onClick={({ key }) => navigate(key)}
+            style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8 }}
+          />
+        </Sider>
+      )}
+
+      {/* 移动端抽屉菜单 */}
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          width={220}
+          styles={{
+            body: { padding: 0, background: 'linear-gradient(180deg, #3D322C 0%, #5C4A3E 100%)' },
+            header: { background: 'linear-gradient(180deg, #3D322C 0%, #5C4A3E 100%)', borderBottom: '1px solid rgba(255,255,255,0.08)' },
+          }}
+          title={<Text strong style={{ color: '#fff', fontSize: 16 }}>行动安全守护系统</Text>}
+          closeIcon={<CloseOutlined style={{ color: '#fff' }} />}
+        >
+          {sidebarContent}
+        </Drawer>
+      )}
 
       <AntLayout>
         <Header
           style={{
             background: '#fff',
-            padding: '0 24px',
+            padding: isMobile ? '0 12px' : '0 24px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
@@ -112,26 +186,34 @@ export default function AppLayout() {
             height: 64,
           }}
         >
+          {isMobile && (
+            <Button
+              type="text"
+              icon={<MenuOutlined style={{ fontSize: 20, color: '#3D322C' }} />}
+              onClick={() => setDrawerOpen(true)}
+              style={{ marginRight: 'auto' }}
+            />
+          )}
           {isAdmin && (
             <Tag color="gold" style={{ marginRight: 12 }} icon={<CrownOutlined />}>
-              管理员
+              {isMobile ? '' : '管理员'}
             </Tag>
           )}
-          <Badge count={unreadAlerts} size="small" offset={[-2, 2]}>
+          <Badge count={notifCount} size="small" offset={[-2, 2]}>
             <BellOutlined
-              style={{ fontSize: 18, marginRight: 24, cursor: 'pointer' }}
+              style={{ fontSize: 18, marginRight: isMobile ? 12 : 24, cursor: 'pointer' }}
               onClick={() => navigate('/alerts')}
             />
           </Badge>
           <Dropdown menu={userMenu} placement="bottomRight">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <Avatar size={32} icon={<UserOutlined />} style={{ backgroundColor: '#E8725A' }} />
-              <Text strong>{user?.username || '家属'}</Text>
+              {!isMobile && <Text strong>{user?.username || '家属'}</Text>}
             </div>
           </Dropdown>
         </Header>
 
-        <Content style={{ margin: 24 }}>
+        <Content style={{ margin: isMobile ? 12 : 24 }}>
           <Outlet />
         </Content>
       </AntLayout>

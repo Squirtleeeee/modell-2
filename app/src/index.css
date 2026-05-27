@@ -1,0 +1,74 @@
+/* Global reset */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Noto Sans SC', 'PingFang SC', -apple-system, sans-serif;
+  background: #F5F0EC;
+  color: #3D322C;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+  /* iOS safe-area */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 隐藏滚动条但可滚动 */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Ant Design 移动端微调 */
+.ant-card {
+  border-radius: 10px;
+}
+
+.ant-statistic-title {
+  color: #8B7E74;
+  font-size: 12px;
+}
+
+.ant-table {
+  font-size: 13px;
+}
+
+/* 触摸目标优化 */
+.ant-btn {
+  min-height: 40px;
+  min-width: 44px;
+}
+
+.ant-switch {
+  min-width: 44px;
+}
+
+/* 卡片悬浮 */
+.ant-card-hoverable:active {
+  transform: scale(0.98);
+}
+
+/* 底部安全区域适配 */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+/* 网络离线提示 */
+.offline-banner {
+  background: #E05555;
+  color: #fff;
+  text-align: center;
+  padding: 4px 8px;
+  font-size: 12px;
+}

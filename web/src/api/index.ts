@@ -1,12 +1,5 @@
-// ============================================================
-// API Layer — 当前使用 Mock 数据，后续替换为真实 HTTP 调用
-//
-// 切换方式：将对应函数体改为 fetch/axios 调用即可
-// 示例：
-//   export const getDashboardOverview = () =>
-//     fetch('/api/dashboard/overview').then(r => r.json());
-// ============================================================
-
+// API Layer — 真实 HTTP 调用 + Mock 兜底
+// 服务正常时走后端 API；服务未启动时回退到 Mock 数据用于演示
 import {
   mockDevice,
   mockTodayOverview,
@@ -17,89 +10,175 @@ import {
 } from '../mock/data';
 import type { AlertRecord } from '../mock/data';
 
-// 模拟网络延迟
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+// ========== 通用请求工具 ==========
 
-// ---------- Dashboard API ----------
+const TOKEN_KEY = 'token';
+
+function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+async function request<T>(url: string, options?: RequestInit, fallback?: T): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string>),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  try {
+    const res = await fetch(url, { ...options, headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: '请求失败' }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (e) {
+    // 服务不可用时回退 Mock
+    if (fallback !== undefined) {
+      console.warn(`[API] ${url} 服务不可用，使用 Mock 数据:`, (e as Error).message);
+      return fallback;
+    }
+    throw e;
+  }
+}
+
+// ========== Dashboard API ==========
+
 export const fetchDashboardOverview = async () => {
-  await delay();
-  return { ...mockTodayOverview };
+  return request('/api/dashboard/overview', {}, mockTodayOverview);
 };
 
 export const fetchHourlyActivity = async () => {
-  await delay();
-  return [...mockHourlyActivity];
+  const data = await request<{ hour: string; steps: number; standing: number; walking: number }[]>(
+    '/api/dashboard/hourly', {}, mockHourlyActivity
+  );
+  return data;
 };
 
 export const fetchWeeklyTrend = async () => {
-  await delay();
-  return [...mockWeeklyTrend];
+  const data = await request<{ date: string; steps: number; sedentary: number; falls: number }[]>(
+    '/api/dashboard/weekly', {}, mockWeeklyTrend
+  );
+  return data;
 };
 
-// ---------- Alerts API ----------
+// ========== Alerts API ==========
+
 export const fetchAlerts = async (params?: {
   type?: string;
   status?: string;
-  page?: number;
-  pageSize?: number;
+  dateStart?: string;
+  dateEnd?: string;
 }): Promise<{ list: AlertRecord[]; total: number }> => {
-  await delay();
-  let list = [...mockAlerts];
-  if (params?.type && params.type !== 'all') {
-    list = list.filter((a) => a.type === params.type);
+  const qs = new URLSearchParams();
+  if (params?.type && params.type !== 'all') qs.set('type', params.type);
+  if (params?.status && params.status !== 'all') qs.set('status', params.status);
+  if (params?.dateStart) qs.set('dateStart', params.dateStart);
+  if (params?.dateEnd) qs.set('dateEnd', params.dateEnd);
+  const qsStr = qs.toString();
+  const url = `/api/alerts${qsStr ? `?${qsStr}` : ''}`;
+
+  try {
+    return await request<{ list: AlertRecord[]; total: number }>(url);
+  } catch {
+    let list = [...mockAlerts];
+    if (params?.type && params.type !== 'all') list = list.filter((a) => a.type === params.type);
+    if (params?.status && params.status !== 'all') list = list.filter((a) => a.status === params.status);
+    return { list, total: list.length };
   }
-  if (params?.status && params.status !== 'all') {
-    list = list.filter((a) => a.status === params.status);
-  }
-  return { list, total: list.length };
 };
 
-export const updateAlertStatus = async (
-  id: string,
-  status: string,
-  note?: string
-) => {
-  await delay(200);
-  const alert = mockAlerts.find((a) => a.id === id);
-  if (alert) {
-    alert.status = status as AlertRecord['status'];
-    if (note) alert.handlerNote = note;
+export const updateAlertStatus = async (id: string, status: string, note?: string) => {
+  try {
+    return await request(`/api/alerts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, note }),
+    });
+  } catch {
+    // Mock 回退
+    const alert = mockAlerts.find((a) => a.id === id);
+    if (alert) {
+      alert.status = status as AlertRecord['status'];
+      if (note) alert.handlerNote = note;
+    }
+    return { success: true };
   }
-  return { success: true };
 };
 
-// ---------- Device API ----------
+// ========== Device API ==========
+
 export const fetchDeviceStatus = async () => {
-  await delay();
-  return { ...mockDevice };
+  try {
+    return await request<typeof mockDevice>('/api/device/status');
+  } catch {
+    return { ...mockDevice };
+  }
 };
 
 export const fetchDeviceConfig = async () => {
-  await delay();
-  return { ...mockDeviceConfig };
+  try {
+    return await request<typeof mockDeviceConfig>('/api/device/config');
+  } catch {
+    return { ...mockDeviceConfig };
+  }
 };
 
 export const updateDeviceConfig = async (config: Record<string, unknown>) => {
-  await delay(200);
-  Object.assign(mockDeviceConfig, config);
-  return { success: true };
+  try {
+    return await request('/api/device/config', { method: 'PUT', body: JSON.stringify(config) });
+  } catch {
+    Object.assign(mockDeviceConfig, config);
+    return { success: true };
+  }
 };
 
-// ---------- 对接嵌入式端的接口预留 ----------
-// BLE / Wi-Fi 数据上报入口（后续嵌入式端对接）
+// ========== 消息 API ==========
+
+export const fetchContacts = async (): Promise<{ contact_id: number; username: string; last_msg: string; last_time: string }[]> => {
+  try {
+    return await request<{ contact_id: number; username: string; last_msg: string; last_time: string }[]>('/api/messages/contacts');
+  } catch {
+    return [];
+  }
+};
+
+export const fetchMessages = async (userId: number): Promise<unknown[]> => {
+  try {
+    return await request<unknown[]>(`/api/messages/${userId}`);
+  } catch {
+    return [];
+  }
+};
+
+export const sendMessage = async (to: number, content: string) => {
+  return request('/api/messages', { method: 'POST', body: JSON.stringify({ to, content }) });
+};
+
+export const fetchUnreadCount = async () => {
+  try {
+    const data = await request<{ count: number }>('/api/messages/unread/count');
+    return data.count || 0;
+  } catch {
+    return 0;
+  }
+};
+
+// ========== 嵌入式设备对接入口 ==========
+
 export const reportDeviceEvent = async (event: {
   type: string;
   timestamp: string;
   payload: Record<string, unknown>;
 }) => {
-  // TODO: 嵌入式端通过 Wi-Fi MQTT 或 BLE 上报事件
-  await delay(100);
   console.log('[Device Event]', event);
   return { success: true };
 };
 
-// MQTT 连接状态（后续对接嵌入式端）
 export const getMqttStatus = async () => {
-  await delay();
-  return { connected: false, broker: 'mqtt://localhost:1883', topic: 'edgi/#' };
+  try {
+    return await request('/api/device/mqtt-status');
+  } catch {
+    return { connected: false, broker: 'mqtt://localhost:1883', topic: 'edgi/#' };
+  }
 };

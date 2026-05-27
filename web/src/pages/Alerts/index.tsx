@@ -19,6 +19,7 @@ import {
 import { AlertOutlined, CheckCircleOutlined, WarningOutlined, SearchOutlined } from '@ant-design/icons';
 import { fetchAlerts, updateAlertStatus } from '../../api';
 import type { AlertRecord } from '../../mock/data';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -30,17 +31,21 @@ export default function Alerts() {
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState<[string, string] | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
   const [handlerNote, setHandlerNote] = useState('');
+  const isMobile = useIsMobile();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetchAlerts({ type: typeFilter, status: statusFilter });
+    const params: Record<string, string> = { type: typeFilter, status: statusFilter };
+    if (dateRange) { params.dateStart = dateRange[0]; params.dateEnd = dateRange[1]; }
+    const res = await fetchAlerts(params as never);
     setAlerts(res.list);
     setTotal(res.total);
     setLoading(false);
-  }, [typeFilter, statusFilter]);
+  }, [typeFilter, statusFilter, dateRange]);
 
   useEffect(() => {
     load();
@@ -189,7 +194,17 @@ export default function Alerts() {
             />
           </Col>
           <Col xs={24} sm={8} md={8}>
-            <RangePicker style={{ width: '100%' }} placeholder={['开始日期', '结束日期']} />
+            <RangePicker
+              style={{ width: '100%' }}
+              placeholder={['开始日期', '结束日期']}
+              onChange={(dates) => {
+                if (dates && dates[0] && dates[1]) {
+                  setDateRange([dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD')]);
+                } else {
+                  setDateRange(null);
+                }
+              }}
+            />
           </Col>
           <Col xs={24} sm={0} md={4}>
             <Button icon={<SearchOutlined />} type="primary" onClick={load}>
@@ -212,6 +227,7 @@ export default function Alerts() {
             showTotal: (t) => `共 ${t} 条记录`,
           }}
           size="middle"
+          scroll={{ x: 800 }}
         />
       </Card>
 
@@ -228,7 +244,8 @@ export default function Alerts() {
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
         footer={null}
-        width={520}
+        width={isMobile ? '100%' : 520}
+        style={{ maxWidth: 520, margin: isMobile ? 0 : undefined }}
       >
         {selectedAlert && (
           <>

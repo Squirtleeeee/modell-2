@@ -1,0 +1,22 @@
+allprojects {
+    buildscript {
+        repositories {
+            maven { url 'https://mirrors.huaweicloud.com/repository/maven' }
+            maven { url 'https://mirrors.huaweicloud.com/repository/gradle-plugin' }
+            google()
+            mavenCentral()
+        }
+    }
+    repositories {
+        maven { url 'https://mirrors.huaweicloud.com/repository/maven' }
+        google()
+        mavenCentral()
+    }
+    afterEvaluate {
+        if (plugins.hasPlugin('com.android.application') || plugins.hasPlugin('com.android.library')) {
+            android.buildToolsVersion = "36.1.0"
+            android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
+            android.compileOptions.targetCompatibility = JavaVersion.VERSION_17
+        }
+    }
+}

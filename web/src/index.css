@@ -67,3 +67,44 @@ body {
 .ant-card-hoverable:hover {
   box-shadow: 0 4px 16px rgba(93, 60, 40, 0.08);
 }
+
+/* Mobile responsive overrides */
+@media (max-width: 767px) {
+  .ant-card {
+    border-radius: 8px;
+  }
+
+  .ant-modal {
+    max-width: calc(100vw - 32px) !important;
+    margin: 8px;
+  }
+
+  .ant-table {
+    font-size: 13px;
+  }
+
+  .ant-form-item-label {
+    padding-bottom: 2px;
+  }
+
+  h4.ant-typography {
+    font-size: 16px;
+  }
+
+  .ant-statistic-content {
+    font-size: 20px;
+  }
+
+  .ant-statistic-title {
+    font-size: 12px;
+  }
+
+  /* Ensure touch targets are large enough */
+  .ant-btn {
+    min-height: 36px;
+  }
+
+  .ant-tabs-tab {
+    padding: 8px 12px;
+  }
+}
