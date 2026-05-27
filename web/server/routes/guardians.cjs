@@ -25,8 +25,8 @@ router.post('/request', requireAuth, (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: '请输入用户名' });
 
-  const target = User.findByUsername(username);
-  if (!target) return res.status(404).json({ error: '用户不存在' });
+  const target = User.findByUsername(username) || User.findByEmail(username) || User.findByPhone(username);
+  if (!target) return res.status(404).json({ error: '用户不存在，请检查输入的用户名/邮箱/手机号' });
 
   try {
     const request = GuardianRequest.create(req.user.id, target.id);

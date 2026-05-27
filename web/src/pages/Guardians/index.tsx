@@ -221,11 +221,11 @@ export default function Guardians() {
         style={{ maxWidth: 440 }}
       >
         <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-          输入对方的用户名，发送监护人申请。对方同意后即可互相监护、在线聊天。
+          输入对方的用户名、邮箱或手机号，发送监护人申请。对方同意后即可互相监护、在线聊天。
         </Text>
         <Input
           prefix={<UserOutlined />}
-          placeholder="输入用户名"
+          placeholder="输入用户名/邮箱/手机号"
           value={searchName}
           onChange={(e) => setSearchName(e.target.value)}
           onPressEnter={handleSearch}

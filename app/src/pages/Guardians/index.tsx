@@ -162,8 +162,8 @@ export default function Guardians() {
       )}
 
       <Modal title="搜索用户" open={searchModal} onCancel={() => { setSearchModal(false); setSearchName(''); }} onOk={handleSearch} confirmLoading={searching} okText="发送监护申请" cancelText="取消" width="100%" style={{ maxWidth: 400 }}>
-        <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 13 }}>输入对方用户名，发送监护人申请。对方同意后即可互相监护、在线聊天。</Text>
-        <Input prefix={<UserOutlined />} placeholder="输入用户名" value={searchName} onChange={(e) => setSearchName(e.target.value)} onPressEnter={handleSearch} />
+        <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 13 }}>输入对方的用户名、邮箱或手机号，发送监护人申请。</Text>
+        <Input prefix={<UserOutlined />} placeholder="用户名/邮箱/手机号" value={searchName} onChange={(e) => setSearchName(e.target.value)} onPressEnter={handleSearch} />
       </Modal>
     </div>
   );
