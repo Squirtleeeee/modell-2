@@ -21,6 +21,7 @@
     "better-sqlite3": "^12.10.0",
     "cors": "^2.8.6",
     "dayjs": "^1.11.20",
+    "dotenv": "^17.4.2",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
     "express": "^5.2.1",

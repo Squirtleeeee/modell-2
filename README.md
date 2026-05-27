@@ -3,6 +3,7 @@
 面向行动不便者（老年人、术后康复者、残障人士等）的智能监护平台。通过可穿戴设备采集运动数据，利用深度学习模型实时检测摔倒事件，提供 **网页管理后台** 和 **Android 移动端 App**，为亲属/监护人提供远程监护能力。
 
 > 硬件平台：Infineon PSoC E84 Edgi-Talk 开发板 + BMI160 IMU 传感器
+> 云端部署：Railway（`modell-2-production.up.railway.app`）
 
 ---
 
@@ -16,8 +17,10 @@
 - [API 接口文档](#api-接口文档)
 - [快速开始 — 网页端](#快速开始--网页端)
 - [快速开始 — 移动端](#快速开始--移动端)
-- [公网访问（固定域名）](#公网访问固定域名)
+- [云端部署（Railway）](#云端部署railway)
 - [设备模拟器](#设备模拟器)
+- [种子数据](#种子数据)
+- [在线聊天 — 完整流程](#在线聊天--完整流程)
 - [后续规划](#后续规划)
 - [UI/UX 设计规范](#uiux-设计规范)
 
@@ -29,13 +32,13 @@
 ┌──────────────────────────────────────────────────────────────┐
 │              网页端 (Web 管理后台)                              │
 │     React 19 · Ant Design 6 · ECharts · HashRouter            │
-│     端口: 5174 (dev) / 3001 (生产)                             │
+│     生产模式端口: 3001                                         │
 └────────────────────────┬─────────────────────────────────────┘
                          │ HTTP / WebSocket (socket.io)
 ┌────────────────────────┼─────────────────────────────────────┐
 │              移动端 (Android APK)                              │
 │     React 19 · Capacitor 8 · antd-mobile · PWA                │
-│     底部 Tab 导航 · Service Worker 离线缓存                     │
+│     底部 Tab 导航 · Service Worker · 默认连云端                │
 └────────────────────────┬─────────────────────────────────────┘
                          │
                          ▼
@@ -46,21 +49,22 @@
 │  │ REST API                                            │    │
 │  │ /api/auth/*    认证（注册/登录/验证码/密码重置）         │    │
 │  │ /api/dashboard/* 数据看板（概览/24h/7d）               │    │
-│  │ /api/device/*  设备数据上报 + 状态查询                  │    │
-│  │ /api/alerts/*  告警列表 + 状态管理                     │    │
+│  │ /api/device/*  设备数据上报 + 状态 + 配置               │    │
+│  │ /api/alerts/*  告警列表 + 状态管理 + 日期筛选           │    │
 │  │ /api/messages/* 用户消息（联系人/对话/发送）             │    │
-│  │ /api/guardians 监护人管理                             │    │
+│  │ /api/guardians 监护人管理 + 申请/同意/拒绝              │    │
 │  ├─────────────────────────────────────────────────────┤    │
 │  │ Socket.io WebSocket                                 │    │
-│  │ 实时推送: 设备数据 · 告警通知 · 用户消息               │    │
+│  │ 实时推送: 设备数据 · 告警通知 · 用户消息 · 申请通知    │    │
 │  ├─────────────────────────────────────────────────────┤    │
 │  │ 静态文件托管 (dist/ → SPA 回退)                       │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │           SQLite 数据库 (server/data.db)               │   │
-│  │  users · password_resets · guardianships               │   │
-│  │  verification_codes · device_data · alerts · messages  │   │
+│  │  users · device_data · alerts · messages              │   │
+│  │  guardianships · guardian_requests · device_configs    │   │
+│  │  verification_codes · password_resets                  │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
                          ▲
@@ -94,6 +98,7 @@
 | 实时通信 | Socket.io (WebSocket) |
 | 邮件 | Resend API → QQ SMTP → Mock 三级降级 |
 | 短信 | 阿里云短信 SDK → Mock 降级 |
+| 云端部署 | Railway（自动从 GitHub 部署） |
 | 频率限制 | express-rate-limit |
 
 ---
@@ -107,15 +112,14 @@ web/                                  # 项目根目录
 ├── 快速启动教程.md                     # 零基础快速上手指南
 │
 ├── web/                              # 网页端 + 后端
+│   ├── nixpacks.toml                 # Railway 部署配置
 │   ├── package.json                  # 依赖 + 脚本
 │   ├── vite.config.ts                # Vite 配置
-│   ├── index.html                    # HTML 入口
 │   │
 │   ├── server/                       # Express 后端
 │   │   ├── index.cjs                 # 入口（API + WebSocket + 静态文件）
-│   │   ├── database.cjs              # SQLite 初始化 + 8 个数据模型
-│   │   ├── data.db                   # 数据库文件（自动生成）
-│   │   ├── migrations.cjs            # 数据库迁移系统（4 个迁移）
+│   │   ├── database.cjs              # SQLite 初始化 + 9 个数据模型
+│   │   ├── migrations.cjs            # 数据库迁移系统（5 个迁移）
 │   │   ├── simulator.cjs             # 设备数据模拟器
 │   │   ├── seed.cjs                  # 演示种子数据脚本
 │   │   ├── middleware/
@@ -124,7 +128,7 @@ web/                                  # 项目根目录
 │   │   ├── routes/
 │   │   │   ├── auth.cjs              # 认证路由
 │   │   │   ├── dashboard.cjs         # 看板数据路由
-│   │   │   ├── device.cjs            # 设备数据路由
+│   │   │   ├── device.cjs            # 设备数据 + 配置路由
 │   │   │   ├── alerts.cjs            # 告警路由
 │   │   │   ├── guardians.cjs         # 监护人路由（申请/同意/拒绝）
 │   │   │   └── messages.cjs          # 消息路由
@@ -134,10 +138,9 @@ web/                                  # 项目根目录
 │   │
 │   ├── src/                          # React 前端
 │   │   ├── App.tsx                   # 路由 + 主题 + AuthProvider
-│   │   ├── theme/index.ts            # 主题配色
 │   │   ├── context/AuthContext.tsx   # 全局认证状态
-│   │   ├── hooks/useMediaQuery.ts    # 响应式 Hook
 │   │   ├── hooks/useSocket.ts        # WebSocket 连接 Hook
+│   │   ├── hooks/useMediaQuery.ts    # 响应式 Hook
 │   │   ├── api/index.ts              # API 层（真实请求 + Mock 兜底）
 │   │   ├── mock/data.ts              # Mock 数据
 │   │   ├── components/
@@ -145,44 +148,39 @@ web/                                  # 项目根目录
 │   │   │   └── ProtectedRoute/       # 路由守卫
 │   │   └── pages/
 │   │       ├── Login/                # 登录（3 种方式）
-│   │       ├── Register/             # 注册（邮箱验证码）
+│   │       ├── Register/             # 注册（邮箱验证码，Mock 模式页面显示验证码）
 │   │       ├── ForgotPassword/       # 找回密码
 │   │       ├── Dashboard/            # 数据看板
 │   │       ├── Alerts/               # 报警记录
 │   │       ├── Device/               # 设备管理
-│   │       └── Guardians/            # 监护人管理（搜索+申请+列表）
+│   │       ├── Guardians/            # 监护人管理（搜索+申请+列表）
 │   │       └── Messages/             # 在线实时聊天
 │   │
-│   ├── dist/                         # 构建产物
+│   └── dist/                         # 构建产物
 │
 ├── app/                              # 移动端 Android App
 │   ├── package.json                  # 移动端依赖
-│   ├── vite.config.ts                # Vite 配置
 │   ├── capacitor.config.ts           # Capacitor 配置
 │   │
 │   ├── src/
-│   │   ├── App.tsx                   # 路由 + 底部 Tab 布局
-│   │   ├── hooks/
-│   │   │   ├── useMediaQuery.ts      # 响应式 Hook
-│   │   │   └── useNetworkStatus.ts   # 网络状态检测
-│   │   ├── api/index.ts              # API 层（可配置后端地址）
+│   │   ├── api/index.ts              # API 层（默认连 Railway 云端）
+│   │   ├── hooks/useSocket.ts        # WebSocket（动态读取服务器地址）
+│   │   ├── context/AuthContext.tsx   # 认证状态（拼接服务器前缀）
 │   │   ├── components/
 │   │   │   └── MobileLayout/         # 底部 Tab 导航栏
-│   │   └── pages/                    # 与网页端页面一一对应
-│   │
-│   ├── public/
-│   │   ├── manifest.json             # PWA 清单
-│   │   ├── sw.js                     # Service Worker
-│   │   └── icons/                    # PWA 图标
+│   │   └── pages/
+│   │       ├── Login/                # 登录（未配置时引导进设置页）
+│   │       ├── Settings/             # 服务器地址配置（⚙齿轮图标入口）
+│   │       ├── Dashboard/            # 数据看板
+│   │       ├── Alerts/               # 报警记录
+│   │       ├── Device/               # 设备管理
+│   │       ├── Guardians/            # 监护人管理
+│   │       └── Messages/             # 在线实时聊天
 │   │
 │   ├── dist/                         # Web 构建产物（被打包进 APK）
 │   └── android/                      # Capacitor Android 项目
-│       ├── build.gradle
-│       ├── settings.gradle
 │       ├── init.gradle               # 国内镜像 + Java 17 兼容配置
-│       └── app/
-│           ├── build.gradle
-│           └── build/outputs/apk/debug/app-debug.apk
+│       └── app/build/outputs/apk/debug/app-debug.apk
 │
 ├── models/                           # 训练好的 ML 模型
 │   └── tflite_export/
@@ -224,7 +222,6 @@ web/                                  # 项目根目录
 | steps | INTEGER | 累计步数 |
 | battery | INTEGER | 电量百分比 |
 | activity | TEXT | standing / walking / fall |
-| created_at | TEXT | 上报时间 |
 
 ### alerts
 
@@ -235,10 +232,6 @@ web/                                  # 项目根目录
 | user_id | INTEGER FK | 所属用户 |
 | type | TEXT | fall / sedentary |
 | status | TEXT | unhandled / processing / handled / false_alarm |
-| confidence | REAL | 置信度 |
-| duration | INTEGER | 持续时长（久坐告警） |
-| location | TEXT | 位置描述 |
-| handler_note | TEXT | 处理备注 |
 
 ### messages
 
@@ -249,7 +242,6 @@ web/                                  # 项目根目录
 | to_user_id | INTEGER FK | 接收者 |
 | content | TEXT | 消息内容 |
 | read | INTEGER | 已读 0/1 |
-| created_at | TEXT | 发送时间 |
 
 ### guardian_requests
 
@@ -259,9 +251,18 @@ web/                                  # 项目根目录
 | from_user_id | INTEGER FK | 申请发起者 |
 | to_user_id | INTEGER FK | 申请接收者 |
 | status | TEXT | pending / accepted / rejected |
-| created_at | TEXT | 申请时间 |
-| updated_at | TEXT | 处理时间 |
 | UNIQUE(from_user_id, to_user_id) | — | 防止重复申请 |
+
+### device_configs
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| user_id | INTEGER FK UNIQUE | 所属用户 |
+| sedentary_interval | INTEGER | 久坐提醒间隔（分钟） |
+| sedentary_mode | TEXT | 检测模式 |
+| alert_volume | INTEGER | 告警音量 |
+| fall_sensitivity | TEXT | 跌倒灵敏度 |
 
 ---
 
@@ -269,55 +270,54 @@ web/                                  # 项目根目录
 
 ### 用户认证
 - 3 种登录方式：用户名+密码 / 手机号+密码 / 手机号+短信验证码
-- 注册需邮箱验证码，可选填手机号
+- 注册需邮箱验证码，可选填手机号（Mock 模式下验证码绿色大字显示在页面上）
 - 忘记密码走邮箱验证码重置
-- JWT 鉴权 + PBKDF2-SHA512 密码哈希
-- 角色权限（admin / family）
+- JWT 鉴权 + PBKDF2-SHA512 密码哈希 + 角色权限
 - API 频率限制（防暴力破解 + 防批量注册）
 
 ### 数据看板（Dashboard）
 - 6 个 KPI 卡片（步数/行走时长/站立时长/跌倒事件/久坐提醒/电量）
-- 24 小时活动分布柱状折线图
-- 7 天趋势图（双 Y 轴）
-- 跌倒事件时卡片边框变红
-- **数据源**：优先走 `/api/dashboard/*` 真实 API，后端未启动时自动回退 Mock
+- 24 小时活动分布 + 7 天趋势图（ECharts）
+- KPI 通过 WebSocket 实时刷新，图表每 30 秒刷新（避免频繁重绘）
+- 数据优先走真实 API，后端未启动时自动回退 Mock
 
 ### 报警管理
-- 告警列表 + 类型/状态筛选
-- 详情弹窗 + 状态流转（未处理→处理中→已处理/误报）
-- **跌倒检测自动生成告警**：设备上报 `fall_detected: true` → 后端自动写入 alerts 表
+- 告警列表 + 类型/状态/日期范围筛选
+- 状态流转（未处理→处理中→已处理/误报）
+- 跌倒检测自动生成告警 + 久坐告警实时统计
 
 ### 设备管理
-- 设备状态监控（在线/离线/电量/当前活动）
-- 参数配置（久坐间隔/检测模式/灵敏度/音量）
+- 设备状态监控 + 参数配置（久坐间隔/检测模式/灵敏度/音量）
+- 配置持久化到 SQLite（device_configs 表）
 - 设备数据上报接口 `POST /api/device/data`
 
 ### 监护人对偶系统
-- **申请制**：搜索用户名 → 发送申请 → 对方同意/拒绝 → 自动建立监护关系
-- 多对多关系，可移除监护人
-- 不能自监护 + 防重复 + 防重复申请
-- WebSocket 实时推送申请通知（对方立刻收到红点提醒）
-- 申请同意后双方自动互为联系人，可开始聊天
+- **申请制**：搜索用户名/邮箱/手机号 → 发送申请 → 同意/拒绝 → 建立关系
+- 多对多关系，防自监护 + 防重复申请
+- WebSocket 实时推送申请通知（右上角红点提醒）
 
-### 用户消息（类似微信/QQ 的在线聊天）
-- **联系人来源**：监护关系自动成为联系人 + 有消息记录的用户
-- 一对一实时聊天：REST API 写入 + WebSocket 实时推送到对方
-- 聊天页面：网页端分栏布局（左联系人右聊天窗），移动端全屏切换
-- 未读消息计数：侧边栏/顶栏红点角标，新消息实时更新
+### 用户消息（在线聊天）
+- 联系人来源：监护关系自动成为联系人 + 有消息记录的用户
+- 一对一实时聊天：REST API 写入 + WebSocket 实时推送
+- 聊天页面：网页端分栏布局，移动端全屏切换
+- 未读消息计数 + 侧边栏/顶栏红点角标
 
 ### 设备模拟器
-- `node server/simulator.cjs` 模拟设备持续上报
+- `node server/simulator.cjs` 模拟设备持续上报（每 5 秒）
 - 自动生成步数、电量、活动状态，周期性触发跌倒
 
 ### WebSocket 实时推送
-- 设备数据 → 后端 → WebSocket → 前端实时更新
-- 用户消息实时送达
+- 设备数据 / 告警通知 / 用户消息 / 申请通知 实时送达
 
 ### 移动端 App
-- Android APK 打包成功（`app-debug.apk` 4.8MB）
-- 底部 Tab 导航（看板/告警/设备/守护）
-- 网络状态检测 + Service Worker 离线缓存
-- 后端地址可配置
+- Android APK（5.6MB），默认连 Railway 云端
+- 底部 Tab 导航（看板/告警/设备/守护/消息）
+- 服务器地址可配置（齿轮图标入口），支持测试连接
+- 首次安装无需任何配置，打开即用
+
+### 云端部署
+- Railway 自动部署，推送 GitHub 即更新
+- 固定域名 `modell-2-production.up.railway.app`，24h 运行
 
 ---
 
@@ -331,9 +331,8 @@ web/                                  # 项目根目录
 | POST | `/api/auth/login` | — | 用户名/手机号+密码登录 |
 | POST | `/api/auth/login-by-sms` | — | 短信验证码登录 |
 | GET | `/api/auth/me` | Bearer | 获取当前用户信息 |
-| POST | `/api/auth/send-email-code` | — | 发送邮箱验证码 |
-| POST | `/api/auth/send-sms-code` | — | 发送短信验证码 |
-| POST | `/api/auth/verify-code` | — | 通用验证码校验 |
+| POST | `/api/auth/send-email-code` | — | 发送邮箱验证码（Mock 返回 code） |
+| POST | `/api/auth/send-sms-code` | — | 发送短信验证码（Mock 返回 code） |
 | POST | `/api/auth/forgot-password` | — | 发送密码重置验证码 |
 | POST | `/api/auth/reset-password` | — | 使用验证码重置密码 |
 
@@ -341,7 +340,7 @@ web/                                  # 项目根目录
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `/api/dashboard/overview` | Bearer | 今日概览 KPI |
+| GET | `/api/dashboard/overview` | Bearer | 今日概览（步数/活动/跌倒/久坐/电量） |
 | GET | `/api/dashboard/hourly` | Bearer | 24 小时活动分布 |
 | GET | `/api/dashboard/weekly` | Bearer | 7 天趋势 |
 
@@ -352,19 +351,20 @@ web/                                  # 项目根目录
 | POST | `/api/device/data` | Bearer | 上报设备数据（跌倒自动生成告警） |
 | GET | `/api/device/status` | Bearer | 查询设备状态 |
 | GET | `/api/device/config` | Bearer | 获取设备配置 |
+| PUT | `/api/device/config` | Bearer | 保存设备配置 |
 
 ### 告警 — `/api/alerts`
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `/api/alerts` | Bearer | 告警列表（支持 type/status 筛选） |
+| GET | `/api/alerts` | Bearer | 告警列表（支持 type/status/dateStart/dateEnd 筛选） |
 | PUT | `/api/alerts/:id` | Bearer | 更新告警状态 + 备注 |
 
 ### 消息 — `/api/messages`
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `/api/messages/contacts` | Bearer | 最近联系人 |
+| GET | `/api/messages/contacts` | Bearer | 联系人列表（含监护关系） |
 | GET | `/api/messages/:userId` | Bearer | 与某用户对话记录 |
 | POST | `/api/messages` | Bearer | 发送消息 |
 | GET | `/api/messages/unread/count` | Bearer | 未读消息数 |
@@ -375,40 +375,21 @@ web/                                  # 项目根目录
 |------|------|------|------|
 | GET | `/api/guardians` | Bearer | 我的监护人 + 我监护的人 |
 | GET | `/api/guardians/requests` | Bearer | 收到的 + 发出的申请列表 |
-| POST | `/api/guardians/request` | Bearer | 发送监护人申请（通过用户名） |
+| POST | `/api/guardians/request` | Bearer | 发送监护申请（用户名/邮箱/手机号均可） |
 | PUT | `/api/guardians/request/:id/accept` | Bearer | 同意申请 |
 | PUT | `/api/guardians/request/:id/reject` | Bearer | 拒绝申请 |
 | DELETE | `/api/guardians/:id` | Bearer | 移除监护人 |
-| GET | `/api/guardians/notifications` | Bearer | 未读通知数（申请 + 消息） |
-
-### 系统
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 |
-
-### 设备数据上报格式
-
-```json
-{
-  "device_id": "EDGI-001",
-  "accel": { "x": 0.1, "y": -0.2, "z": 9.8 },
-  "gyro": { "x": 0.01, "y": 0.02, "z": 0 },
-  "fall_detected": false,
-  "steps": 120,
-  "battery": 85,
-  "activity": "walking"
-}
-```
+| GET | `/api/guardians/notifications/count` | Bearer | 未读通知数 |
 
 ---
 
 ## 快速开始 — 网页端
 
-### 前置条件
-- Node.js >= 18
+### 方式 1：直接访问云端（推荐）
 
-### 安装并启动
+浏览器打开 `https://modell-2-production.up.railway.app`，注册账号即可使用。
+
+### 方式 2：本地运行
 
 ```bash
 cd web/web
@@ -417,36 +398,23 @@ npm run build
 npm run server
 ```
 
-浏览器打开 `http://localhost:3001`，用 `admin / admin123` 登录。
+浏览器打开 `http://localhost:3001`。
 
 ### 默认账户
 
 | 用户名 | 密码 | 角色 |
 |--------|------|------|
 | admin | admin123 | 管理员 |
-| zhangsan | demo123 | 家属 |
-| lihua | demo123 | 家属 |
-| laowang | demo123 | 被监护人 |
 
-> 首次启动自动创建 admin 账户。其他演示账户需手动注册。
-
-### 开发模式（前端热更新）
-
-```bash
-# 终端 1：后端
-npm run server
-
-# 终端 2：前端（Vite HMR，端口 5174）
-npm run dev
-```
+> 首次启动自动创建 admin。其他演示账户可自行注册，或运行 `node server/seed.cjs` 生成。
 
 ---
 
 ## 快速开始 — 移动端
 
-### 前置条件
-- Java 17（Zulu JDK）
-- Android SDK（Build Tools 36.1.0+，Platform android-36）
+### 直接安装 APK
+
+将 `app/android/app/build/outputs/apk/debug/app-debug.apk` 传到手机，安装即用。APK 已预配置 Railway 云端地址，无需任何设置。
 
 ### 构建 APK
 
@@ -455,51 +423,28 @@ cd app
 npm install
 npm run build
 
+rm -rf android/app/build
+cp -r dist android/app/src/main/assets/public
 cd android
-./gradlew assembleDebug --init-script init.gradle
+./gradlew assembleDebug --init-script init.gradle --offline
 ```
 
-APK 生成在 `app/android/app/build/outputs/apk/debug/app-debug.apk`。
-
-### 安装到手机
-
-1. 将 APK 传到手机，点击安装
-2. 进入 App 后，在设置页填入后端地址
-3. 后端地址为电脑局域网 IP + 端口，如 `http://192.168.1.165:3001`
-
-### 修改后端地址
-
-在 `app/src/api/index.ts` 顶部修改 `SERVER_URL` 默认值：
-
-```ts
-const SERVER_URL = localStorage.getItem('server_url') || 'http://你的IP:3001';
-```
+> 首次构建不要用 `--offline`，让 Gradle 下载依赖。之后每次改前端代码重新构建用上述命令。
 
 ---
 
-## 公网访问（固定域名）
+## 云端部署（Railway）
 
-使用 Serveo SSH 隧道，将本地后端暴露到公网固定域名。
+项目部署在 [Railway](https://railway.app)，推送 GitHub 自动部署。
 
-### 一次性配置
+**已部署地址**：`https://modell-2-production.up.railway.app`
 
-1. 生成 SSH 密钥：`ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_serveo -N ""`
-2. 注册 [Serveo](https://console.serveo.net) → SSH Keys → 添加公钥
-3. Domains → Add Domain → 预约子域名（如 `mobility-guardian`）
+### 配置说明
 
-### 每次启动
-
-```bash
-# 窗口 1：后端
-cd web/web
-npm run build
-npm run server
-
-# 窗口 2：公网隧道
-ssh -i ~/.ssh/id_rsa_serveo -R mobility-guardian:80:localhost:3001 serveo.net
-```
-
-访问 `https://mobility-guardian.serveousercontent.com`（换成你预约的子域名）。
+- `nixpacks.toml`：Node.js 22 + `npm install` + `npm run build` + `node server/index.cjs`
+- Root Directory：`web`
+- 数据库 SQLite 文件在 Railway 容器内，免费额度 5 美元/月
+- 免费实例每次部署会重置数据库（可通过 Railway Volume 持久化）
 
 ---
 
@@ -513,9 +458,9 @@ node server/simulator.cjs
 ```
 
 模拟器会：
-- 每 2 秒上报一次设备数据
+- 每 5 秒上报一次设备数据
 - 交替切换 standing / walking 状态
-- 约每 100 秒触发一次跌倒（自动生成告警）
+- 约每 250 秒触发一次跌倒（自动生成告警）
 - 自动用 admin 账户登录
 
 ---
@@ -529,18 +474,15 @@ cd web/web
 node server/seed.cjs
 ```
 
-生成内容包括：
+生成内容：
 - **演示账户**：zhangsan / lihua / laowang（密码均为 `demo123`）
 - **监护人关系**：zhangsan + lihua 共同监护 laowang
 - **7 天历史数据**：720 条设备数据，累计 18,381 步
 - **15 条历史告警**：含跌倒 + 久坐，含误报
-- **5 条示例消息**：zhangsan ↔ laowang、lihua ↔ laowang
 
 ---
 
 ## 在线聊天 — 完整流程
-
-系统实现了类似微信/QQ 的好友申请 + 实时聊天体系：
 
 ```
 A 注册登录 → 搜索 B 的用户名 → 发送监护人申请
@@ -548,10 +490,10 @@ A 注册登录 → 搜索 B 的用户名 → 发送监护人申请
   → B 点进「监护人管理」→「收到的申请」→ 点「同意」
   → A 收到 WebSocket 推送「申请已通过」
   → 双方联系人列表出现对方
-  → 双方点击进入聊天 → 发消息 → 对方实时收到 ✅
+  → 双方点击进入聊天 → 发消息 → 对方实时收到
 ```
 
-聊天消息同时写入数据库 + 通过 Socket.io 实时推送到对方客户端。无论网页端还是移动端，都能实时收发。
+聊天消息同时写入数据库 + Socket.io 实时推送到对方。网页端和移动端均支持。
 
 ---
 
@@ -560,8 +502,6 @@ A 注册登录 → 搜索 B 的用户名 → 发送监护人申请
 | 方向 | 内容 |
 |------|------|
 | 嵌入式端对接 | BMI160 IMU → TFLite 推理 → MQTT/Wi-Fi → 后端 |
-| 推送通知 | FCM/APNs 推送（跌倒告警、久坐提醒） |
-| 语音消息 | 嵌入式端录音 → 上传 → 监护人播放 |
 | iOS App | Capacitor iOS 平台适配 |
 | 深色模式 | 主题切换 |
 | 管理面板 | 用户管理 + 系统统计 |

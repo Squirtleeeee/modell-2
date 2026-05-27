@@ -35,7 +35,7 @@ async function sendEmail(to, subject, html) {
   // 1. 优先用 Resend
   const resend = getResend();
   if (resend) {
-    const from = process.env.RESEND_FROM || '行动安全守护系统 <onboarding@resend.dev>';
+    const from = process.env.RESEND_FROM || '行动安全守护系统 <noreply@safeguardian.xyz>';
     const { data, error } = await resend.emails.send({ from, to, subject, html });
     if (error) {
       console.error('[Resend] 发送失败:', error.message);

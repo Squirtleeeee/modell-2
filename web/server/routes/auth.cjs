@@ -122,11 +122,8 @@ router.post('/send-email-code', sendCodeLimiter, async (req, res) => {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   VerificationCode.create(email, code, 'email', purpose);
 
-  try {
-    await sendVerificationCodeEmail(email, code);
-  } catch (e) {
-    console.error('[Email] 发送失败:', e.message);
-  }
+  // 异步发送，不阻塞响应
+  sendVerificationCodeEmail(email, code).catch(e => console.error('[Email] 发送失败:', e.message));
 
   // Mock 模式下返回验证码，方便测试
   const isMock = !process.env.RESEND_API_KEY && !process.env.SMTP_USER;
