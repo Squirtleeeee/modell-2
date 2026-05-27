@@ -361,6 +361,8 @@ const Alert = {
     if (params.userId) { conditions.push('user_id = ?'); args.push(params.userId); }
     if (params.type && params.type !== 'all') { conditions.push('type = ?'); args.push(params.type); }
     if (params.status && params.status !== 'all') { conditions.push('status = ?'); args.push(params.status); }
+    if (params.dateStart) { conditions.push("date(created_at) >= ?"); args.push(params.dateStart); }
+    if (params.dateEnd) { conditions.push("date(created_at) <= ?"); args.push(params.dateEnd); }
     const where = conditions.join(' AND ');
     const total = db.prepare(`SELECT COUNT(*) as count FROM alerts WHERE ${where}`).get(...args).count;
     const list = db.prepare(`SELECT * FROM alerts WHERE ${where} ORDER BY created_at DESC`).all(...args);

@@ -31,6 +31,7 @@ export default function Alerts() {
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState<[string, string] | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
   const [handlerNote, setHandlerNote] = useState('');
@@ -38,11 +39,13 @@ export default function Alerts() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetchAlerts({ type: typeFilter, status: statusFilter });
+    const params: Record<string, string> = { type: typeFilter, status: statusFilter };
+    if (dateRange) { params.dateStart = dateRange[0]; params.dateEnd = dateRange[1]; }
+    const res = await fetchAlerts(params as never);
     setAlerts(res.list);
     setTotal(res.total);
     setLoading(false);
-  }, [typeFilter, statusFilter]);
+  }, [typeFilter, statusFilter, dateRange]);
 
   useEffect(() => {
     load();
@@ -191,7 +194,17 @@ export default function Alerts() {
             />
           </Col>
           <Col xs={24} sm={8} md={8}>
-            <RangePicker style={{ width: '100%' }} placeholder={['开始日期', '结束日期']} />
+            <RangePicker
+              style={{ width: '100%' }}
+              placeholder={['开始日期', '结束日期']}
+              onChange={(dates) => {
+                if (dates && dates[0] && dates[1]) {
+                  setDateRange([dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD')]);
+                } else {
+                  setDateRange(null);
+                }
+              }}
+            />
           </Col>
           <Col xs={24} sm={0} md={4}>
             <Button icon={<SearchOutlined />} type="primary" onClick={load}>

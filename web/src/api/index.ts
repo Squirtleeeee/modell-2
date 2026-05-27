@@ -68,17 +68,20 @@ export const fetchWeeklyTrend = async () => {
 export const fetchAlerts = async (params?: {
   type?: string;
   status?: string;
+  dateStart?: string;
+  dateEnd?: string;
 }): Promise<{ list: AlertRecord[]; total: number }> => {
   const qs = new URLSearchParams();
   if (params?.type && params.type !== 'all') qs.set('type', params.type);
   if (params?.status && params.status !== 'all') qs.set('status', params.status);
+  if (params?.dateStart) qs.set('dateStart', params.dateStart);
+  if (params?.dateEnd) qs.set('dateEnd', params.dateEnd);
   const qsStr = qs.toString();
   const url = `/api/alerts${qsStr ? `?${qsStr}` : ''}`;
 
   try {
     return await request<{ list: AlertRecord[]; total: number }>(url);
   } catch {
-    // Mock 回退带筛选
     let list = [...mockAlerts];
     if (params?.type && params.type !== 'all') list = list.filter((a) => a.type === params.type);
     if (params?.status && params.status !== 'all') list = list.filter((a) => a.status === params.status);

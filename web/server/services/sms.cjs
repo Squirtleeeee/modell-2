@@ -42,15 +42,15 @@ async function sendSms(phone, code, templateCode) {
   return { success: true, mock: true };
 }
 
-async function sendVerificationCodeSms(phone) {
-  const code = generateCode();
+async function sendVerificationCodeSms(phone, codeOverride) {
+  const code = codeOverride || generateCode();
   lastCodes[phone] = { code, time: Date.now() };
   const result = await sendSms(phone, code, process.env.ALICLOUD_SMS_TEMPLATE_CODE);
   return { ...result, code: result.mock ? code : undefined };
 }
 
-async function sendLoginCodeSms(phone) {
-  const code = generateCode();
+async function sendLoginCodeSms(phone, codeOverride) {
+  const code = codeOverride || generateCode();
   lastCodes[phone] = { code, time: Date.now() };
   const result = await sendSms(phone, code, process.env.ALICLOUD_SMS_TEMPLATE_CODE);
   return { ...result, code: result.mock ? code : undefined };

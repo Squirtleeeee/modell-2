@@ -157,9 +157,9 @@ router.post('/send-sms-code', sendCodeLimiter, async (req, res) => {
 
   try {
     if (purpose === 'login') {
-      await sendLoginCodeSms(phone);
+      await sendLoginCodeSms(phone, code);
     } else {
-      await sendVerificationCodeSms(phone);
+      await sendVerificationCodeSms(phone, code);
     }
   } catch (e) {
     console.error('[SMS] 发送失败:', e.message);

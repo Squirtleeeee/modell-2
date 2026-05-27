@@ -7,8 +7,8 @@ const router = Router();
 
 // GET /api/alerts — 告警列表
 router.get('/', requireAuth, (req, res) => {
-  const { type, status } = req.query;
-  res.json(Alert.list({ userId: req.user.id, type, status }));
+  const { type, status, dateStart, dateEnd } = req.query;
+  res.json(Alert.list({ userId: req.user.id, type, status, dateStart, dateEnd }));
 });
 
 // PUT /api/alerts/:id — 更新告警状态
