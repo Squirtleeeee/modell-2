@@ -11,6 +11,7 @@ export default function Register() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [emailSeconds, setEmailSeconds] = useState(0);
+  const [emailCode, setEmailCode] = useState('');
 
   const startEmailCountdown = () => {
     setEmailSeconds(60);
@@ -29,8 +30,9 @@ export default function Register() {
       return;
     }
     try {
-      await sendEmailCode(email, 'register');
-      message.success('验证码已发送至您的邮箱');
+      const res = await sendEmailCode(email, 'register');
+      message.success('验证码已发送');
+      if (res.code) setEmailCode(res.code);
       startEmailCountdown();
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : '发送失败');
@@ -76,6 +78,12 @@ export default function Register() {
             <Input prefix={<MailOutlined />} placeholder="邮箱" />
           </Form.Item>
 
+          {emailCode && (
+            <div style={{ background: '#F6FFED', border: '1px solid #B7EB8F', borderRadius: 6, padding: '6px 12px', marginBottom: 12, textAlign: 'center' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>验证码：</Text>
+              <Text strong style={{ fontSize: 20, color: '#52C41A', letterSpacing: 4, marginLeft: 8 }}>{emailCode}</Text>
+            </div>
+          )}
           <Form.Item name="emailCode" rules={[{ required: true, message: '请输入邮箱验证码' }]}>
             <Input
               prefix={<SafetyCertificateOutlined />}

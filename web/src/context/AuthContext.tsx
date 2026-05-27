@@ -22,8 +22,8 @@ interface AuthContextType extends AuthState {
   loginBySms: (phone: string, code: string) => Promise<void>;
   register: (username: string, email: string, password: string, emailCode: string, phone?: string) => Promise<void>;
   logout: () => void;
-  sendEmailCode: (email: string, purpose: 'register' | 'reset_password') => Promise<void>;
-  sendSmsCode: (phone: string, purpose: 'register' | 'login' | 'reset_password') => Promise<void>;
+  sendEmailCode: (email: string, purpose: 'register' | 'reset_password') => Promise<{ message: string; code?: string }>;
+  sendSmsCode: (phone: string, purpose: 'register' | 'login' | 'reset_password') => Promise<{ message: string; code?: string }>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   isAdmin: boolean;
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 发送邮箱验证码
   const sendEmailCode = useCallback(
     async (email: string, purpose: 'register' | 'reset_password') => {
-      await api('/api/auth/send-email-code', { email, purpose });
+      return api('/api/auth/send-email-code', { email, purpose });
     },
     [api]
   );
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 发送短信验证码
   const sendSmsCode = useCallback(
     async (phone: string, purpose: 'register' | 'login' | 'reset_password') => {
-      await api('/api/auth/send-sms-code', { phone, purpose });
+      return api('/api/auth/send-sms-code', { phone, purpose });
     },
     [api]
   );
