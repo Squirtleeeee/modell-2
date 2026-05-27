@@ -20,6 +20,7 @@ export const mockTodayOverview = {
   standDurationMin: 180,
   fallEvents: 0,
   sedentaryAlerts: 2,
+  battery: 85,
 };
 
 export const mockHourlyActivity = Array.from({ length: 24 }, (_, hour) => {

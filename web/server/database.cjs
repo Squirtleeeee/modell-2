@@ -267,12 +267,15 @@ const DeviceData = {
       FROM device_data
       WHERE user_id = ? AND date(created_at) = date('now')
     `).get(userId);
+    const alertsDb = require('./database.cjs');
+    const sedCount = db.prepare("SELECT COUNT(*) as c FROM alerts WHERE user_id = ? AND type = 'sedentary' AND date(created_at) = date('now')").get(userId)?.c || 0;
     return {
       steps: row?.steps || 0,
       walkDurationMin: row?.walk_minutes || 0,
       standDurationMin: row?.stand_minutes || 0,
       fallEvents: row?.fall_events || 0,
-      sedentaryAlerts: 0,
+      sedentaryAlerts: sedCount,
+      battery: row?.battery || 0,
     };
   },
 
@@ -496,4 +499,35 @@ const GuardianRequest = {
   },
 };
 
-module.exports = { db, User, PasswordReset, Guardianship, VerificationCode, DeviceData, Alert, Message, GuardianRequest };
+// ========== 设备配置 ==========
+const DeviceConfig = {
+  get(userId, deviceId = 'EDGI-001') {
+    let row = db.prepare('SELECT * FROM device_configs WHERE user_id = ? AND device_id = ?').get(userId, deviceId);
+    if (!row) {
+      db.prepare('INSERT INTO device_configs (user_id, device_id) VALUES (?, ?)').run(userId, deviceId);
+      row = db.prepare('SELECT * FROM device_configs WHERE user_id = ? AND device_id = ?').get(userId, deviceId);
+    }
+    return {
+      sedentaryInterval: row.sedentary_interval,
+      sedentaryMode: row.sedentary_mode,
+      alertVolume: row.alert_volume,
+      fallSensitivity: row.fall_sensitivity,
+    };
+  },
+
+  update(userId, deviceId, config) {
+    db.prepare(`
+      UPDATE device_configs SET
+        sedentary_interval = ?, sedentary_mode = ?, alert_volume = ?,
+        fall_sensitivity = ?, updated_at = datetime('now')
+      WHERE user_id = ? AND device_id = ?
+    `).run(
+      config.sedentaryInterval ?? 30, config.sedentaryMode ?? 'both',
+      config.alertVolume ?? 80, config.fallSensitivity ?? 'standard',
+      userId, deviceId || 'EDGI-001'
+    );
+    return this.get(userId, deviceId);
+  },
+};
+
+module.exports = { db, User, PasswordReset, Guardianship, VerificationCode, DeviceData, Alert, Message, GuardianRequest, DeviceConfig };

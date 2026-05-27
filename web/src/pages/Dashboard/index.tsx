@@ -16,9 +16,9 @@ import {
   fetchDashboardOverview,
   fetchHourlyActivity,
   fetchWeeklyTrend,
+  fetchAlerts,
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
-import { mockAlerts } from '../../mock/data';
 import { useSocket } from '../../hooks/useSocket';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 
@@ -30,6 +30,7 @@ interface Overview {
   standDurationMin: number;
   fallEvents: number;
   sedentaryAlerts: number;
+  battery: number;
 }
 
 const alertColumns = [
@@ -87,26 +88,28 @@ export default function Dashboard() {
   };
 
   const loadCharts = async () => {
-    const [hourly, weekly] = await Promise.all([
+    const [hourly, weekly, alerts] = await Promise.all([
       fetchHourlyActivity(),
       fetchWeeklyTrend(),
+      fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 5) || []),
     ]);
     setHourlyData(hourly);
     setWeeklyTrend(weekly);
-    setRecentAlerts(mockAlerts.slice(0, 5));
+    setRecentAlerts(alerts);
   };
 
   const loadAll = async () => {
     setLoading(true);
-    const [ov, hourly, weekly] = await Promise.all([
+    const [ov, hourly, weekly, alerts] = await Promise.all([
       fetchDashboardOverview(),
       fetchHourlyActivity(),
       fetchWeeklyTrend(),
+      fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 5) || []),
     ]);
     setOverview(ov);
     setHourlyData(hourly);
     setWeeklyTrend(weekly);
-    setRecentAlerts(mockAlerts.slice(0, 5));
+    setRecentAlerts(alerts);
     setLoading(false);
   };
 
@@ -292,7 +295,7 @@ export default function Dashboard() {
           <Card hoverable>
             <Statistic
               title="设备电量"
-              value={72}
+              value={overview?.battery ?? '--'}
               suffix="%"
               prefix={<ThunderboltOutlined />}
               valueStyle={{ color: '#4DB6AC' }}

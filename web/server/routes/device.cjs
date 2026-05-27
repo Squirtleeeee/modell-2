@@ -1,6 +1,6 @@
 // 设备数据路由：上报 + 查询
 const { Router } = require('express');
-const { DeviceData, User } = require('../database.cjs');
+const { DeviceData, DeviceConfig } = require('../database.cjs');
 const { requireAuth } = require('../middleware/auth.cjs');
 
 const router = Router();
@@ -71,14 +71,17 @@ router.get('/status', requireAuth, (req, res) => {
   res.json(status);
 });
 
-// GET /api/device/config — 设备参数（当前为模拟默认值）
+// GET /api/device/config — 获取设备配置
 router.get('/config', requireAuth, (req, res) => {
-  res.json({
-    sedentaryInterval: 30,
-    sedentaryMode: 'both',
-    alertVolume: 80,
-    fallSensitivity: 'standard',
-  });
+  const { device_id } = req.query;
+  res.json(DeviceConfig.get(req.user.id, device_id || 'EDGI-001'));
+});
+
+// PUT /api/device/config — 保存设备配置
+router.put('/config', requireAuth, (req, res) => {
+  const { device_id, ...config } = req.body;
+  const result = DeviceConfig.update(req.user.id, device_id || 'EDGI-001', config);
+  res.json(result);
 });
 
 module.exports = router;

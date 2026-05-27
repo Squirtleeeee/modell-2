@@ -40,7 +40,7 @@ export default function AppLayout() {
     const token = localStorage.getItem('token');
     if (!token) return;
     const fetchCount = () => {
-      fetch('/api/guardians/notifications', { headers: { Authorization: `Bearer ${token}` } })
+      fetch('/api/guardians/notifications/count', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json()).then(d => setNotifCount(d.total || 0)).catch(() => {});
     };
     fetchCount();

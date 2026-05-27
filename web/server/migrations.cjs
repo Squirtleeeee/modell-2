@@ -114,6 +114,24 @@ const migrations = [
       `);
     },
   },
+  {
+    name: '005_create_device_configs',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS device_configs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL UNIQUE,
+          device_id TEXT NOT NULL DEFAULT 'EDGI-001',
+          sedentary_interval INTEGER DEFAULT 30,
+          sedentary_mode TEXT DEFAULT 'both',
+          alert_volume INTEGER DEFAULT 80,
+          fall_sensitivity TEXT DEFAULT 'standard',
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+      `);
+    },
+  },
 ];
 
 function runMigrations() {

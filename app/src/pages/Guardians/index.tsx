@@ -42,8 +42,10 @@ export default function Guardians() {
   const [searchName, setSearchName] = useState('');
   const [searching, setSearching] = useState(false);
 
+  const getServer = () => localStorage.getItem('server_url') || 'https://modell-2-production.up.railway.app';
+
   const api = useCallback((url: string, options: RequestInit = {}) =>
-    fetch(url, {
+    fetch(`${getServer()}${url}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(options.headers || {}) },
     }).then((r) => r.json().then((d) => ({ ok: r.ok, data: d }))),

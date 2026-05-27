@@ -17,10 +17,10 @@ import {
   fetchDashboardOverview,
   fetchHourlyActivity,
   fetchWeeklyTrend,
+  fetchAlerts,
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
 import { useSocket } from '../../hooks/useSocket';
-import { mockAlerts } from '../../mock/data';
 
 const { Title, Text } = Typography;
 
@@ -30,6 +30,7 @@ interface Overview {
   standDurationMin: number;
   fallEvents: number;
   sedentaryAlerts: number;
+  battery: number;
 }
 
 export default function Dashboard() {
@@ -46,14 +47,14 @@ export default function Dashboard() {
 
   const loadCharts = async () => {
     const [hourly, weekly] = await Promise.all([fetchHourlyActivity(), fetchWeeklyTrend()]);
-    setHourlyData(hourly); setWeeklyTrend(weekly); setRecentAlerts(mockAlerts.slice(0, 3));
+    setHourlyData(hourly); setWeeklyTrend(weekly); setRecentAlerts([]);
   };
 
   const loadAll = async () => {
     setLoading(true);
     const [ov, hourly, weekly] = await Promise.all([fetchDashboardOverview(), fetchHourlyActivity(), fetchWeeklyTrend()]);
     setOverview(ov); setHourlyData(hourly); setWeeklyTrend(weekly);
-    setRecentAlerts(mockAlerts.slice(0, 3)); setLoading(false);
+    setRecentAlerts([]); setLoading(false);
   };
 
   useEffect(() => { loadAll(); }, []);
@@ -141,7 +142,7 @@ export default function Dashboard() {
           <Statistic title="久坐提醒" value={overview?.sedentaryAlerts} suffix="次" prefix={<WarningOutlined />} valueStyle={{ color: token.colorWarning, fontSize: 20 }} />
         </Card>
         <Card size="small" style={{ textAlign: 'center' }}>
-          <Statistic title="设备电量" value={72} suffix="%" prefix={<ThunderboltOutlined />} valueStyle={{ color: '#4DB6AC', fontSize: 20 }} />
+          <Statistic title="设备电量" value={overview?.battery ?? '--'} suffix="%" prefix={<ThunderboltOutlined />} valueStyle={{ color: '#4DB6AC', fontSize: 20 }} />
         </Card>
       </div>
 
