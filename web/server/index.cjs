@@ -1,4 +1,5 @@
 // Express 后端 — API + 静态文件 + WebSocket
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
