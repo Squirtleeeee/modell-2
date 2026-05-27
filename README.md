@@ -269,8 +269,9 @@ web/                                  # 项目根目录
 ## 已实现功能
 
 ### 用户认证
-- 3 种登录方式：用户名+密码 / 手机号+密码 / 手机号+短信验证码
-- 注册需邮箱验证码，可选填手机号（Mock 模式下验证码绿色大字显示在页面上）
+- 用户名+密码登录
+- ~~手机号登录/短信验证码登录~~（已移除）
+- 注册需邮箱验证码（验证码通过 Resend 发送真实邮件）
 - 忘记密码走邮箱验证码重置
 - JWT 鉴权 + PBKDF2-SHA512 密码哈希 + 角色权限
 - API 频率限制（防暴力破解 + 防批量注册）
@@ -328,11 +329,11 @@ web/                                  # 项目根目录
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
 | POST | `/api/auth/register` | — | 注册（需邮箱验证码） |
-| POST | `/api/auth/login` | — | 用户名/手机号+密码登录 |
-| POST | `/api/auth/login-by-sms` | — | 短信验证码登录 |
+| POST | `/api/auth/login` | — | 用户名+密码登录 |
+| ~~POST~~ | ~~`/api/auth/login-by-sms`~~ | — | ~~（已移除）~~ |
 | GET | `/api/auth/me` | Bearer | 获取当前用户信息 |
-| POST | `/api/auth/send-email-code` | — | 发送邮箱验证码（Mock 返回 code） |
-| POST | `/api/auth/send-sms-code` | — | 发送短信验证码（Mock 返回 code） |
+| POST | `/api/auth/send-email-code` | — | 发送邮箱验证码 |
+| ~~POST~~ | ~~`/api/auth/send-sms-code`~~ | — | ~~（已移除）~~ |
 | POST | `/api/auth/forgot-password` | — | 发送密码重置验证码 |
 | POST | `/api/auth/reset-password` | — | 使用验证码重置密码 |
 
