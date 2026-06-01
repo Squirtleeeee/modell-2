@@ -262,8 +262,8 @@ const DeviceData = {
         COALESCE(SUM(steps), 0) as steps,
         COALESCE(MAX(battery), 0) as battery,
         COALESCE(SUM(CASE WHEN fall_detected = 1 THEN 1 ELSE 0 END), 0) as fall_events,
-        COALESCE(SUM(CASE WHEN activity = 'walking' THEN 1 ELSE 0 END), 0) as walk_minutes,
-        COALESCE(SUM(CASE WHEN activity = 'standing' THEN 1 ELSE 0 END), 0) as stand_minutes
+        COALESCE(ROUND(SUM(CASE WHEN activity = 'walking' THEN 1 ELSE 0 END) / 12.0), 0) as walk_minutes,
+        COALESCE(ROUND(SUM(CASE WHEN activity = 'standing' THEN 1 ELSE 0 END) / 12.0), 0) as stand_minutes
       FROM device_data
       WHERE user_id = ? AND date(created_at) = date('now')
     `).get(userId);
@@ -303,30 +303,39 @@ const DeviceData = {
 
   // 7 天趋势
   weeklyTrend(userId) {
-    const rows = db.prepare(`
+    const deviceRows = db.prepare(`
       SELECT
         date(created_at) as date,
         COALESCE(SUM(steps), 0) as steps,
-        COALESCE(SUM(CASE WHEN fall_detected = 1 THEN 1 ELSE 0 END), 0) as falls,
-        0 as sedentary
+        COALESCE(SUM(CASE WHEN fall_detected = 1 THEN 1 ELSE 0 END), 0) as falls
       FROM device_data
       WHERE user_id = ? AND created_at >= datetime('now', '-6 days')
       GROUP BY date(created_at)
       ORDER BY date(created_at)
     `).all(userId);
+    const alertCounts = db.prepare(`
+      SELECT date(created_at) as date, COUNT(*) as cnt
+      FROM alerts WHERE user_id = ? AND type = 'sedentary'
+      AND created_at >= datetime('now', '-6 days')
+      GROUP BY date(created_at)
+    `).all(userId);
     const map = {};
-    for (const r of rows) map[r.date] = r;
+    for (const r of deviceRows) map[r.date] = { ...r, sedentary: 0 };
+    for (const a of alertCounts) {
+      if (map[a.date]) map[a.date].sedentary = a.cnt;
+    }
     const result = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
       const label = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const r = map[key];
       result.push({
         date: label,
-        steps: map[key]?.steps || 0,
-        sedentary: 0,
-        falls: map[key]?.falls || 0,
+        steps: r?.steps || 0,
+        sedentary: r?.sedentary || 0,
+        falls: r?.falls || 0,
       });
     }
     return result;
@@ -514,6 +523,8 @@ const DeviceConfig = {
       sedentaryMode: row.sedentary_mode,
       alertVolume: row.alert_volume,
       fallSensitivity: row.fall_sensitivity,
+      voiceEnabled: Boolean(row.voice_enabled ?? 1),
+      wifiSsid: row.wifi_ssid || '未配置',
     };
   },
 
@@ -521,11 +532,13 @@ const DeviceConfig = {
     db.prepare(`
       UPDATE device_configs SET
         sedentary_interval = ?, sedentary_mode = ?, alert_volume = ?,
-        fall_sensitivity = ?, updated_at = datetime('now')
+        fall_sensitivity = ?, voice_enabled = ?, wifi_ssid = ?,
+        updated_at = datetime('now')
       WHERE user_id = ? AND device_id = ?
     `).run(
       config.sedentaryInterval ?? 30, config.sedentaryMode ?? 'both',
       config.alertVolume ?? 80, config.fallSensitivity ?? 'standard',
+      config.voiceEnabled ? 1 : 0, config.wifiSsid || '未配置',
       userId, deviceId || 'EDGI-001'
     );
     return this.get(userId, deviceId);

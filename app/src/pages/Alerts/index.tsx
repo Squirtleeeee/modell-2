@@ -14,6 +14,7 @@ export default function Alerts() {
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState<string[] | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
   const [handlerNote, setHandlerNote] = useState('');
@@ -21,11 +22,13 @@ export default function Alerts() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetchAlerts({ type: typeFilter, status: statusFilter });
+    const params: Record<string, string> = { type: typeFilter, status: statusFilter };
+    if (dateRange) { params.dateStart = dateRange[0]; params.dateEnd = dateRange[1]; }
+    const res = await fetchAlerts(params as never);
     setAlerts(res.list);
     setTotal(res.total);
     setLoading(false);
-  }, [typeFilter, statusFilter]);
+  }, [typeFilter, statusFilter, dateRange]);
 
   useEffect(() => { load(); }, [load]);
 

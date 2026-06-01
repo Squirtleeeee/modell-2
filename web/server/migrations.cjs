@@ -132,6 +132,18 @@ const migrations = [
       `);
     },
   },
+  {
+    name: '006_add_device_config_voice_wifi',
+    up(db) {
+      const cols = db.prepare("PRAGMA table_info(device_configs)").all().map(c => c.name);
+      if (!cols.includes('voice_enabled')) {
+        db.exec("ALTER TABLE device_configs ADD COLUMN voice_enabled INTEGER DEFAULT 1");
+      }
+      if (!cols.includes('wifi_ssid')) {
+        db.exec("ALTER TABLE device_configs ADD COLUMN wifi_ssid TEXT DEFAULT '未配置'");
+      }
+    },
+  },
 ];
 
 function runMigrations() {

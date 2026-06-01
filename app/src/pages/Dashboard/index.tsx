@@ -47,14 +47,18 @@ export default function Dashboard() {
 
   const loadCharts = async () => {
     const [hourly, weekly] = await Promise.all([fetchHourlyActivity(), fetchWeeklyTrend()]);
-    setHourlyData(hourly); setWeeklyTrend(weekly); setRecentAlerts([]);
+    const alerts = await fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 3) || []);
+    setHourlyData(hourly); setWeeklyTrend(weekly); setRecentAlerts(alerts);
   };
 
   const loadAll = async () => {
     setLoading(true);
-    const [ov, hourly, weekly] = await Promise.all([fetchDashboardOverview(), fetchHourlyActivity(), fetchWeeklyTrend()]);
+    const [ov, hourly, weekly, alerts] = await Promise.all([
+      fetchDashboardOverview(), fetchHourlyActivity(), fetchWeeklyTrend(),
+      fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 3) || []),
+    ]);
     setOverview(ov); setHourlyData(hourly); setWeeklyTrend(weekly);
-    setRecentAlerts([]); setLoading(false);
+    setRecentAlerts(alerts); setLoading(false);
   };
 
   useEffect(() => { loadAll(); }, []);

@@ -84,4 +84,14 @@ router.put('/config', requireAuth, (req, res) => {
   res.json(result);
 });
 
+// GET /api/device/mqtt-status — MQTT 连接状态
+router.get('/mqtt-status', requireAuth, (req, res) => {
+  const io = req.app.get('io');
+  res.json({
+    connected: !!io,
+    broker: process.env.MQTT_BROKER || 'mqtt://localhost:1883',
+    topic: 'edgi/#',
+  });
+});
+
 module.exports = router;
