@@ -1,4 +1,4 @@
-// 邮件发送服务 — QQ邮箱 SMTP (优先) / Resend API (备用) / Mock (兜底)
+// 邮件发送服务 — QQ邮箱用SMTP(秒到) / 其他邮箱用Resend / Mock(兜底)
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.qq.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
@@ -32,19 +32,23 @@ function getSmtp() {
 }
 
 async function sendEmail(to, subject, html) {
-  // 1. 优先用 QQ SMTP（QQ 内部投递秒到）
-  const smtp = getSmtp();
-  if (smtp) {
-    try {
-      const info = await smtp.sendMail({ from: SMTP_USER, to, subject, html });
-      console.log('[SMTP] 已发送至', to, '| ID:', info.messageId);
-      return { success: true, mock: false, provider: 'smtp', messageId: info.messageId };
-    } catch (e) {
-      console.error('[SMTP] 发送失败，降级 Resend:', e.message);
+  const isQQ = to.endsWith('@qq.com') || to.endsWith('@vip.qq.com') || to.endsWith('@foxmail.com');
+
+  // QQ 邮箱用 SMTP 内部投递（秒到），其他邮箱用 Resend
+  if (isQQ) {
+    const smtp = getSmtp();
+    if (smtp) {
+      try {
+        const info = await smtp.sendMail({ from: SMTP_USER, to, subject, html });
+        console.log('[SMTP] 已发送至', to, '| ID:', info.messageId);
+        return { success: true, mock: false, provider: 'smtp', messageId: info.messageId };
+      } catch (e) {
+        console.error('[SMTP] 发送失败，降级 Resend:', e.message);
+      }
     }
   }
 
-  // 2. 备用 Resend
+  // Resend
   const resend = getResend();
   if (resend) {
     const from = process.env.RESEND_FROM || '行动安全守护系统 <noreply@safeguardian.xyz>';
@@ -58,7 +62,7 @@ async function sendEmail(to, subject, html) {
     }
   }
 
-  // 3. 兜底 Mock
+  // Mock 兜底
   console.log(`\n[Email Mock] 收件人: ${to}`);
   console.log(`[Email Mock] 主题: ${subject}`);
   console.log(`[Email Mock] 内容: ${html.replace(/<[^>]+>/g, '').trim()}\n`);
