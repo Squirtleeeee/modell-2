@@ -1,4 +1,4 @@
-// 邮件发送服务 — Resend API (优先) / QQ邮箱 SMTP (备用) / Mock (兜底)
+// 邮件发送服务 — QQ邮箱 SMTP (优先) / Resend API (备用) / Mock (兜底)
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.qq.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
@@ -32,25 +32,30 @@ function getSmtp() {
 }
 
 async function sendEmail(to, subject, html) {
-  // 1. 优先用 Resend
+  // 1. 优先用 QQ SMTP（QQ 内部投递秒到）
+  const smtp = getSmtp();
+  if (smtp) {
+    try {
+      const info = await smtp.sendMail({ from: SMTP_USER, to, subject, html });
+      console.log('[SMTP] 已发送至', to, '| ID:', info.messageId);
+      return { success: true, mock: false, provider: 'smtp', messageId: info.messageId };
+    } catch (e) {
+      console.error('[SMTP] 发送失败，降级 Resend:', e.message);
+    }
+  }
+
+  // 2. 备用 Resend
   const resend = getResend();
   if (resend) {
     const from = process.env.RESEND_FROM || '行动安全守护系统 <noreply@safeguardian.xyz>';
-    const { data, error } = await resend.emails.send({ from, to, subject, html });
-    if (error) {
-      console.error('[Resend] 发送失败:', error.message);
-      throw new Error('邮件发送失败: ' + error.message);
+    try {
+      const { data, error } = await resend.emails.send({ from, to, subject, html });
+      if (error) throw new Error(error.message);
+      console.log('[Resend] 已发送至', to, '| ID:', data?.id);
+      return { success: true, mock: false, provider: 'resend', messageId: data?.id };
+    } catch (e) {
+      console.error('[Resend] 发送失败，降级 Mock:', e.message);
     }
-    console.log('[Resend] 已发送至', to, '| ID:', data?.id);
-    return { success: true, mock: false, provider: 'resend', messageId: data?.id };
-  }
-
-  // 2. 备用 SMTP
-  const smtp = getSmtp();
-  if (smtp) {
-    const info = await smtp.sendMail({ from: SMTP_USER, to, subject, html });
-    console.log('[SMTP] 已发送至', to, '| ID:', info.messageId);
-    return { success: true, mock: false, provider: 'smtp', messageId: info.messageId };
   }
 
   // 3. 兜底 Mock
