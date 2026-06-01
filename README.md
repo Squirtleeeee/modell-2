@@ -288,9 +288,11 @@ web/                                  # 项目根目录
 - 跌倒检测自动生成告警 + 久坐告警实时统计
 
 ### 设备管理
-- 设备状态监控 + 参数配置（久坐间隔/检测模式/灵敏度/音量）
+- 设备状态监控 + 参数配置（久坐间隔/检测模式/灵敏度/音量/语音开关/WiFi）
+- 配置持久化到 SQLite，刷新不丢失
 - 配置持久化到 SQLite（device_configs 表）
 - 设备数据上报接口 `POST /api/device/data`
+- MQTT 连接状态查询 `GET /api/device/mqtt-status`
 
 ### 监护人对偶系统
 - **申请制**：搜索用户名/邮箱/手机号 → 发送申请 → 同意/拒绝 → 建立关系
@@ -352,7 +354,9 @@ web/                                  # 项目根目录
 | POST | `/api/device/data` | Bearer | 上报设备数据（跌倒自动生成告警） |
 | GET | `/api/device/status` | Bearer | 查询设备状态 |
 | GET | `/api/device/config` | Bearer | 获取设备配置 |
+ | GET | `/api/device/mqtt-status` | Bearer | MQTT 连接状态 |
 | PUT | `/api/device/config` | Bearer | 保存设备配置 |
+ | GET | `/api/device/mqtt-status` | Bearer | MQTT 连接状态 |
 
 ### 告警 — `/api/alerts`
 
