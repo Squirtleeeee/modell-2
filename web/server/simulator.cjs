@@ -48,8 +48,17 @@ function fallAccel() {
   };
 }
 
+function randomLie() {
+  // 平躺时的稳定小幅波动
+  return {
+    x: 0.2 + (Math.random() - 0.5) * 0.1,
+    y: (Math.random() - 0.5) * 0.05,
+    z: 0.3 + (Math.random() - 0.5) * 0.1,
+  };
+}
+
 async function sendData(activity, fallDetected) {
-  const accel = activity === 'walking' ? randomWalk() : activity === 'fall' ? fallAccel() : randomStand();
+  const accel = activity === 'walking' ? randomWalk() : activity === 'fallen' ? fallAccel() : activity === 'lying' ? randomLie() : randomStand();
   const gyro = {
     x: (Math.random() - 0.5) * 0.3,
     y: (Math.random() - 0.5) * 0.3,
@@ -70,7 +79,7 @@ async function sendData(activity, fallDetected) {
   };
 
   const r = await api('POST', '/api/device/data', payload);
-  const icon = fallDetected ? '🆘 跌倒!' : activity === 'walking' ? '🚶' : '🧍';
+  const icon = fallDetected ? '🆘 跌倒!' : activity === 'walking' ? '🚶' : activity === 'lying' ? '🛌' : '🧍';
   console.log(`${icon} [${new Date().toISOString().slice(11, 19)}] ${activity} | steps=${steps} batt=${Math.round(battery)}% | ${JSON.stringify(r)}`);
 }
 
@@ -88,12 +97,12 @@ async function main() {
     }
   }
 
+  const states = ['lying', 'standing', 'walking'];
   let cycle = 0;
   setInterval(async () => {
     cycle++;
-    // 每 10 个周期约有一次跌倒（演示时可观察告警生成）
     const fall = cycle % 50 === 25;
-    const activity = fall ? 'fall' : cycle % 3 === 0 ? 'walking' : 'standing';
+    const activity = fall ? 'fallen' : states[cycle % 3];
     await sendData(activity, fall);
   }, 5000);
 }

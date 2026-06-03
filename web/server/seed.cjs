@@ -65,17 +65,21 @@ function generateDeviceData(deviceId, userId, days) {
         date.setHours(h, m, 0, 0);
         const hourWeight = h >= 8 && h <= 10 ? 2 : h >= 16 && h <= 18 ? 2 : h >= 20 ? 0.5 : 1;
 
-        const isWalking = Math.random() < 0.3 * hourWeight;
-        const isFall = Math.random() < 0.002; // 极低概率跌倒
-        const activity = isFall ? 'fall' : isWalking ? 'walking' : 'standing';
+        const r = Math.random();
+        const isWalking = r < 0.25 * hourWeight;
+        const isFall = r < 0.002;
+        const isLying = !isFall && !isWalking && r < 0.5;
+        const activity = isFall ? 'fallen' : isWalking ? 'walking' : isLying ? 'lying' : 'standing';
         const stepInc = isWalking ? Math.floor(Math.random() * 80 + 30) : 0;
         totalSteps += stepInc;
         const battery = Math.max(30, 100 - (d * 8) - (h * 0.3) + Math.random() * 5);
 
         const a = activity === 'walking'
           ? { x: (Math.random() - 0.5) * 0.5, y: Math.random() * 1.5, z: 9.8 + Math.random() }
-          : activity === 'fall'
+          : activity === 'fallen'
           ? { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6, z: 2 + Math.random() * 3 }
+          : activity === 'lying'
+          ? { x: 0.2 + (Math.random() - 0.5) * 0.1, y: (Math.random() - 0.5) * 0.05, z: 0.3 }
           : { x: (Math.random() - 0.5) * 0.05, y: (Math.random() - 0.5) * 0.05, z: 9.81 };
 
         stmt.run(

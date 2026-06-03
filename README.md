@@ -48,7 +48,7 @@
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │ REST API                                            │    │
 │  │ /api/auth/*    认证（注册/登录/验证码/密码重置）         │    │
-│  │ /api/dashboard/* 数据看板（概览/24h/7d）               │    │
+│  │ /api/dashboard/* 数据看板（概览/活动趋势）               │    │
 │  │ /api/device/*  设备数据上报 + 状态 + 配置               │    │
 │  │ /api/alerts/*  告警列表 + 状态管理 + 日期筛选           │    │
 │  │ /api/messages/* 用户消息（联系人/对话/发送）             │    │
@@ -182,13 +182,9 @@ web/                                  # 项目根目录
 │       ├── init.gradle               # 国内镜像 + Java 17 兼容配置
 │       └── app/build/outputs/apk/debug/app-debug.apk
 │
-├── models/                           # 训练好的 ML 模型
-│   └── tflite_export/
-│       ├── fall_detection_float32.tflite    # 1.02MB
-│       └── fall_detection_int8.tflite       # 319KB（嵌入式端用）
-│
-├── data/                             # 训练数据
-└── outputs/                          # 模型评估结果
+├── models/                           # ML 模型（已移除，嵌入式端独立训练）
+├── data/                             # 训练数据（已移除）
+└── outputs/                          # 模型评估结果（已移除）
 ```
 
 ---
@@ -221,7 +217,7 @@ web/                                  # 项目根目录
 | fall_detected | INTEGER | 是否检测到跌倒 |
 | steps | INTEGER | 累计步数 |
 | battery | INTEGER | 电量百分比 |
-| activity | TEXT | standing / walking / fall |
+| activity | TEXT | lying / standing / walking / fallen |
 
 ### alerts
 
@@ -277,8 +273,8 @@ web/                                  # 项目根目录
 - API 频率限制（防暴力破解 + 防批量注册）
 
 ### 数据看板（Dashboard）
-- 6 个 KPI 卡片（步数/行走时长/站立时长/跌倒事件/久坐提醒/电量）
-- 24 小时活动分布 + 7 天趋势图（ECharts）
+- 5 个 KPI 卡片（行走时长/站立静坐时长/摔倒事件/长时间不活动提醒/电量）
+- 活动趋势折线图：7 天/30 天切换，展示平躺/站立正坐/行走每日占比（ECharts）
 - KPI 通过 WebSocket 实时刷新，图表每 30 秒刷新（避免频繁重绘）
 - 数据优先走真实 API，后端未启动时自动回退 Mock
 
@@ -343,9 +339,8 @@ web/                                  # 项目根目录
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `/api/dashboard/overview` | Bearer | 今日概览（步数/活动/跌倒/久坐/电量） |
-| GET | `/api/dashboard/hourly` | Bearer | 24 小时活动分布 |
-| GET | `/api/dashboard/weekly` | Bearer | 7 天趋势 |
+| GET | `/api/dashboard/overview` | Bearer | 今日概览（活动时长/摔倒/不活动提醒/电量） |
+| GET | `/api/dashboard/activity-trend?days=7` | Bearer | 每日活动占比趋势（平躺/站立正坐/行走/摔倒） |
 
 ### 设备数据 — `/api/device`
 
@@ -464,7 +459,7 @@ node server/simulator.cjs
 
 模拟器会：
 - 每 5 秒上报一次设备数据
-- 交替切换 standing / walking 状态
+- 循环切换 lying / standing / walking 状态
 - 约每 250 秒触发一次跌倒（自动生成告警）
 - 自动用 admin 账户登录
 
