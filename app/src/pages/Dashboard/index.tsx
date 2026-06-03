@@ -121,7 +121,7 @@ export default function Dashboard() {
     series: ['lying', 'standing', 'walking'].map((key) => ({
       name: activityLabel[key],
       type: 'line',
-      data: trendData.map((d) => (d as Record<string, number>)[key]),
+      data: trendData.map((d) => (d as unknown as Record<string, number>)[key]),
       itemStyle: { color: activityColor[key] },
       smooth: true,
       symbol: 'none',
