@@ -177,10 +177,10 @@ export default function Dashboard() {
       max: 100,
       nameTextStyle: { fontSize: 11 },
     },
-    series: ['lying', 'standing', 'walking'].map((key) => ({
+    series: (['lying', 'standing', 'walking'] as const).map((key) => ({
       name: activityLabel[key],
       type: 'line',
-      data: trendData.map((d) => (d as unknown as Record<string, number>)[key]),
+      data: trendData.map((d) => d[key]),
       itemStyle: { color: activityColor[key] },
       smooth: true,
       symbol: 'circle',
