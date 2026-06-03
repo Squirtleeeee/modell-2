@@ -23,25 +23,30 @@ export const mockTodayOverview = {
   battery: 85,
 };
 
-export const mockHourlyActivity = Array.from({ length: 24 }, (_, hour) => {
-  const active = hour >= 6 && hour <= 20;
-  return {
-    hour: `${hour.toString().padStart(2, '0')}:00`,
-    steps: active ? Math.floor(Math.random() * 600 + 50) : Math.floor(Math.random() * 30),
-    standing: active ? Math.floor(Math.random() * 20 + 5) : Math.floor(Math.random() * 30 + 10),
-    walking: active ? Math.floor(Math.random() * 15 + 2) : 0,
-  };
-});
+function genMockTrend(days: number) {
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const label = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const lying = 30 + Math.floor(Math.random() * 20);
+    const standing = 25 + Math.floor(Math.random() * 20);
+    const walking = 10 + Math.floor(Math.random() * 20);
+    const fallen = Math.random() > 0.9 ? Math.floor(Math.random() * 5) : 0;
+    const total = lying + standing + walking + fallen;
+    result.push({
+      date: label,
+      lying: Math.round(lying / total * 100),
+      standing: Math.round(standing / total * 100),
+      walking: Math.round(walking / total * 100),
+      fallen: Math.round(fallen / total * 100),
+    });
+  }
+  return result;
+}
 
-export const mockWeeklyTrend = [
-  { date: '05-13', steps: 5120, sedentary: 3, falls: 0 },
-  { date: '05-14', steps: 6843, sedentary: 2, falls: 0 },
-  { date: '05-15', steps: 3209, sedentary: 4, falls: 0 },
-  { date: '05-16', steps: 7812, sedentary: 1, falls: 0 },
-  { date: '05-17', steps: 5634, sedentary: 2, falls: 1 },
-  { date: '05-18', steps: 9081, sedentary: 1, falls: 0 },
-  { date: '05-19', steps: 4328, sedentary: 2, falls: 0 },
-];
+export const mockActivityTrend7 = genMockTrend(7);
+export const mockActivityTrend30 = genMockTrend(30);
 
 // --------------- Alerts ---------------
 export interface AlertRecord {

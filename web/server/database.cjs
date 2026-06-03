@@ -279,29 +279,31 @@ const DeviceData = {
     };
   },
 
-  // 小时级活动
-  hourlyActivity(userId) {
+  // 每日活动占比趋势（横/竖/走/摔 百分比）
+  dailyActivityTrend(userId, days) {
     const rows = db.prepare(`
-      SELECT
-        CAST(strftime('%H', created_at) AS INTEGER) as hour,
-        COALESCE(SUM(steps), 0) as steps,
-        COALESCE(SUM(CASE WHEN activity = 'walking' THEN 1 ELSE 0 END), 0) as walking,
-        COALESCE(SUM(CASE WHEN activity = 'standing' THEN 1 ELSE 0 END), 0) as standing
+      SELECT date(created_at) as date, activity, COUNT(*) as cnt
       FROM device_data
-      WHERE user_id = ? AND date(created_at) = date('now')
-      GROUP BY strftime('%H', created_at)
-    `).all(userId);
-    const map = {};
-    for (const r of rows) map[r.hour] = r;
-    return Array.from({ length: 24 }, (_, hour) => ({
-      hour: `${hour.toString().padStart(2, '0')}:00`,
-      steps: map[hour]?.steps || 0,
-      standing: map[hour]?.standing || 0,
-      walking: map[hour]?.walking || 0,
-    }));
+      WHERE user_id = ? AND date(created_at) >= date('now', ?)
+      GROUP BY date(created_at), activity
+      ORDER BY date(created_at)
+    `).all(userId, `-${days - 1} days`);
+
+    const result = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dayRows = rows.filter(r => r.date === key);
+      const total = dayRows.reduce((s, r) => s + r.cnt, 0);
+      const getPct = (act) => total > 0 ? Math.round((dayRows.find(r => r.activity === act)?.cnt || 0) / total * 100) : 0;
+      result.push({ date: label, lying: getPct('lying'), standing: getPct('standing'), walking: getPct('walking'), fallen: getPct('fallen') });
+    }
+    return result;
   },
 
-  // 7 天趋势
+  // 7 天趋势（保留兼容）
   weeklyTrend(userId) {
     const deviceRows = db.prepare(`
       SELECT

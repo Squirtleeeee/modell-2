@@ -3,8 +3,8 @@
 import {
   mockDevice,
   mockTodayOverview,
-  mockHourlyActivity,
-  mockWeeklyTrend,
+  mockActivityTrend7,
+  mockActivityTrend30,
   mockAlerts,
   mockDeviceConfig,
 } from '../mock/data';
@@ -57,12 +57,11 @@ export const fetchDashboardOverview = async () => {
   return request('/api/dashboard/overview', {}, mockTodayOverview);
 };
 
-export const fetchHourlyActivity = async () => {
-  return request('/api/dashboard/hourly', {}, mockHourlyActivity);
-};
-
-export const fetchWeeklyTrend = async () => {
-  return request('/api/dashboard/weekly', {}, mockWeeklyTrend);
+export const fetchActivityTrend = async (days: number) => {
+  const fallback = days === 30 ? mockActivityTrend30 : mockActivityTrend7;
+  return request<{ date: string; lying: number; standing: number; walking: number; fallen: number }[]>(
+    `/api/dashboard/activity-trend?days=${days}`, {}, fallback
+  );
 };
 
 // ========== Alerts API ==========

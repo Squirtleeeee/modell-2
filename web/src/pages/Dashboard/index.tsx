@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Row, Col, Card, Statistic, Typography, Table, Tag, Spin, Flex, theme as antTheme } from 'antd';
+import { Row, Col, Card, Statistic, Typography, Table, Tag, Spin, Flex, Segmented, theme as antTheme } from 'antd';
 import {
   FallOutlined,
   AimOutlined,
@@ -10,12 +10,10 @@ import {
   WarningOutlined,
   AlertOutlined,
 } from '@ant-design/icons';
-import * as echarts from 'echarts';
 import ReactECharts from 'echarts-for-react';
 import {
   fetchDashboardOverview,
-  fetchHourlyActivity,
-  fetchWeeklyTrend,
+  fetchActivityTrend,
   fetchAlerts,
 } from '../../api';
 import type { AlertRecord } from '../../mock/data';
@@ -71,10 +69,18 @@ const alertColumns = [
   },
 ];
 
+const trendDaysOptions = [
+  { label: '7天', value: 7 },
+  { label: '30天', value: 30 },
+];
+
+const activityLabel: Record<string, string> = { lying: '横着', standing: '竖着', walking: '走着' };
+const activityColor: Record<string, string> = { lying: '#4DB6AC', standing: '#F0A04B', walking: '#52c41a' };
+
 export default function Dashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [hourlyData, setHourlyData] = useState<{ hour: string; steps: number; standing: number; walking: number }[]>([]);
-  const [weeklyTrend, setWeeklyTrend] = useState<{ date: string; steps: number; sedentary: number; falls: number }[]>([]);
+  const [trendData, setTrendData] = useState<{ date: string; lying: number; standing: number; walking: number; fallen: number }[]>([]);
+  const [trendDays, setTrendDays] = useState(7);
   const [recentAlerts, setRecentAlerts] = useState<AlertRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const { token } = antTheme.useToken();
@@ -88,32 +94,36 @@ export default function Dashboard() {
   };
 
   const loadCharts = async () => {
-    const [hourly, weekly, alerts] = await Promise.all([
-      fetchHourlyActivity(),
-      fetchWeeklyTrend(),
+    const [trend, alerts] = await Promise.all([
+      fetchActivityTrend(trendDays),
       fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 5) || []),
     ]);
-    setHourlyData(hourly);
-    setWeeklyTrend(weekly);
+    setTrendData(trend);
     setRecentAlerts(alerts);
   };
 
   const loadAll = async () => {
     setLoading(true);
-    const [ov, hourly, weekly, alerts] = await Promise.all([
+    const [ov, trend, alerts] = await Promise.all([
       fetchDashboardOverview(),
-      fetchHourlyActivity(),
-      fetchWeeklyTrend(),
+      fetchActivityTrend(trendDays),
       fetchAlerts().then(d => (d as { list: AlertRecord[] }).list?.slice(0, 5) || []),
     ]);
     setOverview(ov);
-    setHourlyData(hourly);
-    setWeeklyTrend(weekly);
+    setTrendData(trend);
     setRecentAlerts(alerts);
     setLoading(false);
   };
 
   useEffect(() => { loadAll(); }, []);
+
+  // 切换天数时重新加载趋势
+  useEffect(() => {
+    if (!loading) {
+      fetchActivityTrend(trendDays).then(setTrendData);
+      setChartKey(k => k + 1);
+    }
+  }, [trendDays]);
 
   // WebSocket 实时刷新 KPI（轻量）
   useEffect(() => {
@@ -130,7 +140,7 @@ export default function Dashboard() {
     if (loading) return;
     const timer = setInterval(() => { loadCharts(); setChartKey(k => k + 1); }, 30000);
     return () => clearInterval(timer);
-  }, [loading]);
+  }, [loading, trendDays]);
 
   if (loading) {
     return (
@@ -140,92 +150,42 @@ export default function Dashboard() {
     );
   }
 
-  const hourlyChartOption = {
-    tooltip: { trigger: 'axis' as const },
+  const trendChartOption = {
+    tooltip: {
+      trigger: 'axis' as const,
+      formatter: (params: { seriesName: string; value: number; marker: string }[]) => {
+        let html = '';
+        for (const p of params) {
+          html += `${p.marker} ${p.seriesName}: ${p.value}%<br/>`;
+        }
+        return html;
+      },
+    },
     legend: {
-      data: ['步数', '站立(分钟)', '行走(分钟)'],
+      data: ['横着', '竖着', '走着'],
       top: 0,
     },
-    grid: { top: 40, right: 24, bottom: 60, left: 56 },
+    grid: { top: 40, right: 24, bottom: 48, left: 56 },
     xAxis: {
       type: 'category' as const,
-      data: hourlyData.map((h) => h.hour),
-      axisLabel: { rotate: 45, fontSize: 10, margin: 8 },
+      data: trendData.map((d) => d.date),
+      axisLabel: { rotate: trendDays === 30 ? 60 : 0, fontSize: 10, margin: 8 },
     },
     yAxis: {
       type: 'value' as const,
-      name: '步数 / 分钟',
+      name: '%',
+      max: 100,
       nameTextStyle: { fontSize: 11 },
     },
-    series: [
-      {
-        name: '步数',
-        type: 'bar',
-        data: hourlyData.map((h) => h.steps),
-        itemStyle: { color: token.colorPrimary },
-        barMaxWidth: 12,
-      },
-      {
-        name: '站立(分钟)',
-        type: 'line',
-        data: hourlyData.map((h) => h.standing),
-        itemStyle: { color: token.colorWarning },
-        smooth: true,
-      },
-      {
-        name: '行走(分钟)',
-        type: 'line',
-        data: hourlyData.map((h) => h.walking),
-        itemStyle: { color: token.colorSuccess },
-        smooth: true,
-      },
-    ],
-  };
-
-  const weeklyChartOption = {
-    tooltip: { trigger: 'axis' as const },
-    legend: { data: ['步数', '久坐次数'], top: 0 },
-    grid: { top: 40, right: 32, bottom: 48, left: 56 },
-    xAxis: {
-      type: 'category' as const,
-      data: weeklyTrend.map((d) => d.date),
-      axisLabel: { margin: 8 },
-    },
-    yAxis: [
-      {
-        type: 'value' as const,
-        name: '步数',
-        nameTextStyle: { fontSize: 11 },
-      },
-      {
-        type: 'value' as const,
-        name: '次数',
-        nameTextStyle: { fontSize: 11 },
-      },
-    ],
-    series: [
-      {
-        name: '步数',
-        type: 'bar',
-        data: weeklyTrend.map((d) => d.steps),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#E8725A' },
-            { offset: 1, color: '#F0A080' },
-          ]),
-        },
-        barMaxWidth: 20,
-      },
-      {
-        name: '久坐次数',
-        type: 'line',
-        yAxisIndex: 1,
-        data: weeklyTrend.map((d) => d.sedentary),
-        itemStyle: { color: '#F0A04B' },
-        symbol: 'circle',
-        symbolSize: 8,
-      },
-    ],
+    series: ['lying', 'standing', 'walking'].map((key) => ({
+      name: activityLabel[key],
+      type: 'line',
+      data: trendData.map((d) => (d as Record<string, number>)[key]),
+      itemStyle: { color: activityColor[key] },
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 4,
+    })),
   };
 
   return (
@@ -304,16 +264,21 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      {/* Charts */}
+      {/* Activity Trend Chart */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={14}>
-          <Card title="今日活动分布">
-            <ReactECharts key={chartKey} option={hourlyChartOption} style={{ height: isMobile ? 260 : 320 }} />
-          </Card>
-        </Col>
-        <Col xs={24} lg={10}>
-          <Card title="近 7 天趋势">
-            <ReactECharts key={chartKey + 100} option={weeklyChartOption} style={{ height: isMobile ? 260 : 320 }} />
+        <Col span={24}>
+          <Card
+            title="活动趋势"
+            extra={
+              <Segmented
+                options={trendDaysOptions}
+                value={trendDays}
+                onChange={(v) => setTrendDays(v as number)}
+                size="small"
+              />
+            }
+          >
+            <ReactECharts key={chartKey} option={trendChartOption} style={{ height: isMobile ? 280 : 360 }} />
           </Card>
         </Col>
       </Row>
