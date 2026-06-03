@@ -6,7 +6,6 @@ import {
   AimOutlined,
   ThunderboltOutlined,
   FieldTimeOutlined,
-  RiseOutlined,
   WarningOutlined,
   AlertOutlined,
   RightOutlined,
@@ -135,9 +134,6 @@ export default function Dashboard() {
       {/* KPI Cards - 2 per row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
         <Card size="small" style={{ textAlign: 'center' }}>
-          <Statistic title="今日步数" value={overview?.steps} suffix="步" prefix={<RiseOutlined />} valueStyle={{ color: token.colorPrimary, fontSize: 20 }} />
-        </Card>
-        <Card size="small" style={{ textAlign: 'center' }}>
           <Statistic title="行走时长" value={overview?.walkDurationMin} suffix="分钟" prefix={<AimOutlined />} valueStyle={{ color: token.colorSuccess, fontSize: 20 }} />
         </Card>
         <Card size="small" style={{ textAlign: 'center' }}>
@@ -147,7 +143,7 @@ export default function Dashboard() {
           <Statistic title="摔倒事件" value={overview?.fallEvents} suffix="次" prefix={<FallOutlined />} valueStyle={{ color: overview?.fallEvents ? '#E05555' : '#4DB6AC', fontSize: 20 }} />
         </Card>
         <Card size="small" style={{ textAlign: 'center' }}>
-          <Statistic title="久坐提醒" value={overview?.sedentaryAlerts} suffix="次" prefix={<WarningOutlined />} valueStyle={{ color: token.colorWarning, fontSize: 20 }} />
+          <Statistic title="长时间不活动提醒" value={overview?.sedentaryAlerts} suffix="次" prefix={<WarningOutlined />} valueStyle={{ color: token.colorWarning, fontSize: 20 }} />
         </Card>
         <Card size="small" style={{ textAlign: 'center' }}>
           <Statistic title="设备电量" value={overview?.battery ?? '--'} suffix="%" prefix={<ThunderboltOutlined />} valueStyle={{ color: '#4DB6AC', fontSize: 20 }} />

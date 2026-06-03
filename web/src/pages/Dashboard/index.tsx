@@ -6,7 +6,6 @@ import {
   AimOutlined,
   ThunderboltOutlined,
   FieldTimeOutlined,
-  RiseOutlined,
   WarningOutlined,
   AlertOutlined,
 } from '@ant-design/icons';
@@ -199,17 +198,6 @@ export default function Dashboard() {
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
-              title="今日步数"
-              value={overview?.steps}
-              suffix="步"
-              prefix={<RiseOutlined />}
-              valueStyle={{ color: token.colorPrimary }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={8} lg={4}>
-          <Card hoverable>
-            <Statistic
               title="行走时长"
               value={overview?.walkDurationMin}
               suffix="分钟"
@@ -243,7 +231,7 @@ export default function Dashboard() {
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card hoverable>
             <Statistic
-              title="久坐提醒"
+              title="长时间不活动提醒"
               value={overview?.sedentaryAlerts}
               suffix="次"
               prefix={<WarningOutlined />}
