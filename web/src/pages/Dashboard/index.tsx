@@ -74,7 +74,7 @@ const trendDaysOptions = [
   { label: '30天', value: 30 },
 ];
 
-const activityLabel: Record<string, string> = { lying: '横着', standing: '竖着', walking: '走着' };
+const activityLabel: Record<string, string> = { lying: '平躺', standing: '站立/正坐', walking: '行走' };
 const activityColor: Record<string, string> = { lying: '#4DB6AC', standing: '#F0A04B', walking: '#52c41a' };
 
 export default function Dashboard() {
@@ -162,7 +162,7 @@ export default function Dashboard() {
       },
     },
     legend: {
-      data: ['横着', '竖着', '走着'],
+      data: ['平躺', '站立/正坐', '行走'],
       top: 0,
     },
     grid: { top: 40, right: 24, bottom: 48, left: 56 },
